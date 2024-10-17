@@ -1,0 +1,23 @@
+# name: test/sql/s2.test
+# description: test s2 extension
+# group: [s2]
+
+# Before we load the extension, this will fail
+statement error
+SELECT s2('Sam');
+----
+Catalog Error: Scalar Function with name s2 does not exist!
+
+# Require statement will ensure this test is run with this extension loaded
+require s2
+
+# Confirm the extension works
+query I
+SELECT s2('Sam');
+----
+S2 Sam 🐥
+
+query I
+SELECT s2_openssl_version('Michael') ILIKE 'S2 Michael, my linked OpenSSL version is OpenSSL%';
+----
+true
