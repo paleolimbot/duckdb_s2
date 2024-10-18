@@ -5,6 +5,11 @@ include(FetchContent)
 # Set extension name here
 set(TARGET_NAME s2)
 
+# DuckDB's extension distribution supports vcpkg. As such, dependencies can be added in ./vcpkg.json and then
+# used in cmake with find_package. Feel free to remove or replace with other dependencies.
+# Note that it should also be removed from vcpkg.json to prevent needlessly installing it..
+find_package(OpenSSL REQUIRED)
+
 set(SWIG_FOUND FALSE)
 set(BUILD_SHARED_LIBS OFF)
 # FetchContent_Declare(
@@ -15,11 +20,6 @@ set(BUILD_SHARED_LIBS OFF)
 FetchContent_Declare(s2geography DIRECTORY ../s2-geography)
 
 FetchContent_MakeAvailable(s2geography)
-
-# DuckDB's extension distribution supports vcpkg. As such, dependencies can be added in ./vcpkg.json and then
-# used in cmake with find_package. Feel free to remove or replace with other dependencies.
-# Note that it should also be removed from vcpkg.json to prevent needlessly installing it..
-find_package(OpenSSL REQUIRED)
 
 set(EXTENSION_NAME ${TARGET_NAME}_extension)
 set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
