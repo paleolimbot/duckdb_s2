@@ -6,3 +6,6 @@
 	path = extension-ci-tools
 	url = https://github.com/duckdb/extension-ci-tools
 	branch = main
+[submodule "s2geography"]
+	path = s2geography
+	url = https://github.com/paleolimbot/s2geography.git
