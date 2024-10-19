@@ -10,6 +10,7 @@
 
 // OpenSSL linked through vcpkg
 #include <openssl/opensslv.h>
+#include <s2geography.h>
 
 namespace duckdb {
 
@@ -29,6 +30,17 @@ inline void S2OpenSSLVersionScalarFun(DataChunk &args, ExpressionState &state, V
 	    [&](string_t name) {
 			return StringVector::AddString(result, "S2 " + name.GetString() +
                                                      ", my linked OpenSSL version is " +
+                                                     OPENSSL_VERSION_TEXT );;
+        });
+}
+
+inline void S2VersionScalarFun(DataChunk &args, ExpressionState &state, Vector &result) {
+    auto &name_vector = args.data[0];
+    UnaryExecutor::Execute<string_t, string_t>(
+	    name_vector, result, args.size(),
+	    [&](string_t name) {
+			return StringVector::AddString(result, "S2 " + name.GetString() +
+                                                     ", my linked S2 version is " +
                                                      OPENSSL_VERSION_TEXT );;
         });
 }
