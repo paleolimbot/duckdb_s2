@@ -12,6 +12,8 @@
 #include <openssl/opensslv.h>
 #include <s2geography.h>
 
+#include "s2_versions.hpp"
+
 namespace duckdb {
 
 inline void S2ScalarFun(DataChunk &args, ExpressionState &state, Vector &result) {
@@ -23,37 +25,12 @@ inline void S2ScalarFun(DataChunk &args, ExpressionState &state, Vector &result)
         });
 }
 
-inline void S2OpenSSLVersionScalarFun(DataChunk &args, ExpressionState &state, Vector &result) {
-    auto &name_vector = args.data[0];
-    UnaryExecutor::Execute<string_t, string_t>(
-	    name_vector, result, args.size(),
-	    [&](string_t name) {
-			return StringVector::AddString(result, "S2 " + name.GetString() +
-                                                     ", my linked OpenSSL version is " +
-                                                     OPENSSL_VERSION_TEXT );;
-        });
-}
-
-inline void S2VersionScalarFun(DataChunk &args, ExpressionState &state, Vector &result) {
-    auto &name_vector = args.data[0];
-    UnaryExecutor::Execute<string_t, string_t>(
-	    name_vector, result, args.size(),
-	    [&](string_t name) {
-			return StringVector::AddString(result, "S2 " + name.GetString() +
-                                                     ", my linked S2 version is " +
-                                                     OPENSSL_VERSION_TEXT );;
-        });
-}
-
 static void LoadInternal(DatabaseInstance &instance) {
     // Register a scalar function
     auto s2_scalar_function = ScalarFunction("s2", {LogicalType::VARCHAR}, LogicalType::VARCHAR, S2ScalarFun);
     ExtensionUtil::RegisterFunction(instance, s2_scalar_function);
 
-    // Register another scalar function
-    auto s2_openssl_version_scalar_function = ScalarFunction("s2_openssl_version", {LogicalType::VARCHAR},
-                                                LogicalType::VARCHAR, S2OpenSSLVersionScalarFun);
-    ExtensionUtil::RegisterFunction(instance, s2_openssl_version_scalar_function);
+    RegisterVersionFunctions(instance);
 }
 
 void S2Extension::Load(DuckDB &db) {
