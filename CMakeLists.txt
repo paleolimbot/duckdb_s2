@@ -194,3 +194,11 @@ install(
   EXPORT "${DUCKDB_EXPORT_SET}"
   LIBRARY DESTINATION "${INSTALL_LIB_DIR}"
   ARCHIVE DESTINATION "${INSTALL_LIB_DIR}")
+
+if(DUCKDB_S2_CTEST)
+  message(STATUS "Registering ctest unit tests")
+  enable_testing()
+
+  add_test(NAME s2 COMMAND "${CMAKE_BINARY_DIR}/test/unittest" "*/duckdb_s2/*")
+  set_tests_properties(s2 PROPERTIES DEPENDS ${EXTENSION_NAME})
+endif()
