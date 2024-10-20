@@ -12,14 +12,21 @@
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/../build",
             "cacheVariables": {
-                "CMAKE_TOOLCHAIN_FILE": "/$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-                "VCPKG_MANIFEST_DIR": "${sourceDir}/..",
-                "VCPKG_BUILD": "1",
                 "CMAKE_BUILD_TYPE": "Debug",
                 "EXTENSION_STATIC_BUILD": "1",
                 "DUCKDB_EXTENSION_CONFIGS": "${sourceDir}/../extension_config.cmake",
                 "ENABLE_SANITIZER": "OFF",
                 "ENABLE_UBSAN": "OFF"
+            }
+        },
+        {
+            "name": "extension_debug_vcpkg",
+            "displayName": "Extension (using vcpkg)",
+            "inherits": ["extension_debug"],
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "/$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+                "VCPKG_MANIFEST_DIR": "${sourceDir}/..",
+                "VCPKG_BUILD": "1"
             }
         }
     ]
