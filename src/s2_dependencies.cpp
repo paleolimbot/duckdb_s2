@@ -3,33 +3,34 @@
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/main/extension_util.hpp"
 
-// OpenSSL linked through vcpkg
 #include <absl/base/config.h>
 #include <openssl/opensslv.h>
 #include <s2geography.h>
 
 namespace duckdb {
 
+namespace duckdb_s2 {
+
 namespace {
-class S2VersionsFunctionData : public TableFunctionData {
+class S2DependenciesFunctionData : public TableFunctionData {
  public:
-  S2VersionsFunctionData() : finished(false) {}
+  S2DependenciesFunctionData() : finished(false) {}
   bool finished{false};
 };
 
-static inline duckdb::unique_ptr<FunctionData> S2VersionsBind(
+static inline duckdb::unique_ptr<FunctionData> S2DependenciesBind(
     ClientContext& context, TableFunctionBindInput& input,
     vector<LogicalType>& return_types, vector<string>& names) {
   names.push_back("dependency");
   names.push_back("version");
   return_types.push_back(LogicalType::VARCHAR);
   return_types.push_back(LogicalType::VARCHAR);
-  return make_uniq<S2VersionsFunctionData>();
+  return make_uniq<S2DependenciesFunctionData>();
 }
 
-static inline void S2VersionsFunction(ClientContext& context, TableFunctionInput& data_p,
-                                      DataChunk& output) {
-  auto& data = data_p.bind_data->CastNoConst<S2VersionsFunctionData>();
+void S2DependenciesScan(ClientContext& context, TableFunctionInput& data_p,
+                        DataChunk& output) {
+  auto& data = data_p.bind_data->CastNoConst<S2DependenciesFunctionData>();
   if (data.finished) {
     return;
   }
@@ -54,9 +55,11 @@ static inline void S2VersionsFunction(ClientContext& context, TableFunctionInput
 
 }  // namespace
 
-inline void RegisterVersionFunctions(DatabaseInstance& instance) {
-  TableFunction versions_func("s2_dependencies", {}, S2VersionsFunction, S2VersionsBind);
+void RegisterS2Dependencies(DatabaseInstance& instance) {
+  TableFunction versions_func("s2_dependencies", {}, S2DependenciesScan,
+                              S2DependenciesBind);
   ExtensionUtil::RegisterFunction(instance, versions_func);
 }
 
+}  // namespace duckdb_s2
 }  // namespace duckdb
