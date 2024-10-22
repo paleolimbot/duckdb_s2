@@ -13,18 +13,13 @@
 namespace duckdb {
 
 inline void S2ScalarFun(DataChunk& args, ExpressionState& state, Vector& result) {
-  auto& name_vector = args.data[0];
-  UnaryExecutor::Execute<string_t, string_t>(
-      name_vector, result, args.size(), [&](string_t name) {
-        return StringVector::AddString(result, "S2 " + name.GetString() + " 🐥");
-        ;
-      });
+  result.SetVectorType(VectorType::CONSTANT_VECTOR);
+  result.SetValue(0, "s2");
 }
 
 static void LoadInternal(DatabaseInstance& instance) {
   // Register a scalar function
-  auto s2_scalar_function =
-      ScalarFunction("s2", {LogicalType::VARCHAR}, LogicalType::VARCHAR, S2ScalarFun);
+  auto s2_scalar_function = ScalarFunction("s2", {}, LogicalType::VARCHAR, S2ScalarFun);
   ExtensionUtil::RegisterFunction(instance, s2_scalar_function);
 
   duckdb_s2::RegisterS2Dependencies(instance);
