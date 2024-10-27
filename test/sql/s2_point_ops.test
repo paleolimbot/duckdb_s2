@@ -1,0 +1,11 @@
+# name: test/sql/s2_point_ops.test
+# description: test s2 extension
+# group: [s2]
+
+# Require statement will ensure this test is run with this extension loaded
+require s2
+
+query I
+SELECT s2_geog_point(0, 0);
+----
+{'x': 1.0, 'y': 0.0, 'z': 0.0}
