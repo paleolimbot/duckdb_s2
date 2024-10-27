@@ -9,6 +9,7 @@
 #include "duckdb/main/extension_util.hpp"
 
 #include "s2_dependencies.hpp"
+#include "s2_types.hpp"
 
 namespace duckdb {
 
@@ -22,6 +23,7 @@ static void LoadInternal(DatabaseInstance& instance) {
   auto s2_scalar_function = ScalarFunction("s2", {}, LogicalType::VARCHAR, S2ScalarFun);
   ExtensionUtil::RegisterFunction(instance, s2_scalar_function);
 
+  duckdb_s2::RegisterTypes(instance);
   duckdb_s2::RegisterS2Dependencies(instance);
 }
 
