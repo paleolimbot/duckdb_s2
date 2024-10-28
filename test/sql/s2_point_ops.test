@@ -1,5 +1,5 @@
 # name: test/sql/s2_point_ops.test
-# description: test s2 extension
+# description: test s2 extension point operations
 # group: [s2]
 
 # Require statement will ensure this test is run with this extension loaded

@@ -1,0 +1,16 @@
+# name: test/sql/s2_cell_ops.test
+# description: test s2 extension cell operations
+# group: [s2]
+
+# Require statement will ensure this test is run with this extension loaded
+require s2
+
+query I
+SELECT s2_cell_debug_string(s2_cell_from_point(s2_geog_point(-64, 45)));
+----
+2/112230310012123001312232330210
+
+query I
+SELECT s2_cell_token(s2_cell_from_point(s2_geog_point(-64, 45)));
+----
+4b59a0cd83b5de49
