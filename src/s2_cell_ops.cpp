@@ -37,14 +37,6 @@ struct S2CellFromPoint {
   }
 };
 
-template <typename Op, typename ArgT, typename ReturnT>
-void ExecuteUnary(DataChunk& args, ExpressionState& state, Vector& result) {
-  Op op;
-  UnaryExecutor::Execute<ArgT, ReturnT>(
-      args.data[0], result, args.size(),
-      [&](ArgT arg0) { return op.ExecuteScalar(arg0); });
-}
-
 template <typename Op>
 struct S2CellToString {
   static void Register(DatabaseInstance& instance, const char* name) {
@@ -63,6 +55,36 @@ struct S2CellToString {
   }
 };
 
+template <typename Op>
+struct S2CellToDouble {
+  static void Register(DatabaseInstance& instance, const char* name) {
+    auto fn = ScalarFunction(name, {Types::S2_CELL()}, LogicalType::DOUBLE, Execute);
+    ExtensionUtil::RegisterFunction(instance, fn);
+  }
+
+  static inline void Execute(DataChunk& args, ExpressionState& state, Vector& result) {
+    Op op;
+    UnaryExecutor::Execute<int64_t, double>(
+        args.data[0], result, args.size(),
+        [&](int64_t arg0) { return op.ExecuteScalar(arg0); });
+  }
+};
+
+template <typename Op>
+struct S2CellToInt8 {
+  static void Register(DatabaseInstance& instance, const char* name) {
+    auto fn = ScalarFunction(name, {Types::S2_CELL()}, LogicalType::TINYINT, Execute);
+    ExtensionUtil::RegisterFunction(instance, fn);
+  }
+
+  static inline void Execute(DataChunk& args, ExpressionState& state, Vector& result) {
+    Op op;
+    UnaryExecutor::Execute<int64_t, int8_t>(
+        args.data[0], result, args.size(),
+        [&](int64_t arg0) { return op.ExecuteScalar(arg0); });
+  }
+};
+
 }  // namespace
 
 void RegisterS2CellOps(DatabaseInstance& instance) {
@@ -71,6 +93,9 @@ void RegisterS2CellOps(DatabaseInstance& instance) {
   S2CellFromPoint::Register(instance);
   S2CellToString<ToDebugString>::Register(instance, "s2_cell_debug_string");
   S2CellToString<ToToken>::Register(instance, "s2_cell_token");
+  S2CellToDouble<Area>::Register(instance, "s2_cell_area");
+  S2CellToDouble<AreaApprox>::Register(instance, "s2_cell_area_approx");
+  S2CellToInt8<Level>::Register(instance, "s2_cell_level");
 }
 
 }  // namespace duckdb_s2
