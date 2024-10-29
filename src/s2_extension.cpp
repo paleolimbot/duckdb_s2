@@ -8,9 +8,10 @@
 #include "duckdb/function/scalar_function.hpp"
 #include "duckdb/main/extension_util.hpp"
 
-#include "s2_dependencies.hpp"
-#include "s2_point_ops.hpp"
 #include "s2_cell_ops.hpp"
+#include "s2_dependencies.hpp"
+#include "s2_geography_ops.hpp"
+#include "s2_point_ops.hpp"
 #include "s2_types.hpp"
 
 namespace duckdb {
@@ -29,6 +30,7 @@ static void LoadInternal(DatabaseInstance& instance) {
   duckdb_s2::RegisterS2Dependencies(instance);
   duckdb_s2::RegisterS2PointOps(instance);
   duckdb_s2::RegisterS2CellOps(instance);
+  duckdb_s2::RegisterS2GeographyOps(instance);
 }
 
 void S2Extension::Load(DuckDB& db) { LoadInternal(*db.instance); }
