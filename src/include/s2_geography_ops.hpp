@@ -1,6 +1,7 @@
 #pragma once
 
 #include "duckdb/main/database.hpp"
+#include "s2geography/geography.h"
 
 namespace duckdb {
 
