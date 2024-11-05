@@ -27,7 +27,7 @@ struct S2GeogFromWKT {
     UnaryExecutor::Execute<string_t, string_t>(
         args.data[0], result, args.size(), [&](string_t wkt) {
           auto geog = reader.read_feature(wkt.GetData(), wkt.GetSize());
-          Encoder encoder;
+          Encoder encoder{};
           geog->EncodeTagged(&encoder);
           return StringVector::AddStringOrBlob(
               result, string_t{encoder.base(), static_cast<uint32_t>(encoder.length())});

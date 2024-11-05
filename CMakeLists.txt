@@ -46,7 +46,6 @@ add_library(s2
   s2geometry/src/s2/s2cell_index.cc
   s2geometry/src/s2/s2cell_union.cc
   s2geometry/src/s2/s2centroids.cc
-  s2geometry/src/s2/s2chain_interpolation_query.cc
   s2geometry/src/s2/s2closest_cell_query.cc
   s2geometry/src/s2/s2closest_edge_query.cc
   s2geometry/src/s2/s2closest_point_query.cc
@@ -55,7 +54,6 @@ add_library(s2
   s2geometry/src/s2/s2coords.cc
   s2geometry/src/s2/s2crossing_edge_query.cc
   s2geometry/src/s2/s2debug.cc
-  s2geometry/src/s2/s2density_tree.cc
   s2geometry/src/s2/s2earth.cc
   s2geometry/src/s2/s2edge_clipping.cc
   s2geometry/src/s2/s2edge_crosser.cc
@@ -63,10 +61,8 @@ add_library(s2
   s2geometry/src/s2/s2edge_distances.cc
   s2geometry/src/s2/s2edge_tessellator.cc
   s2geometry/src/s2/s2error.cc
-  s2geometry/src/s2/s2fractal.cc
   s2geometry/src/s2/s2furthest_edge_query.cc
   s2geometry/src/s2/s2hausdorff_distance_query.cc
-  s2geometry/src/s2/s2index_cell_data.cc
   s2geometry/src/s2/s2latlng.cc
   s2geometry/src/s2/s2latlng_rect.cc
   s2geometry/src/s2/s2latlng_rect_bounder.cc
@@ -75,10 +71,10 @@ add_library(s2
   s2geometry/src/s2/s2lax_polyline_shape.cc
   s2geometry/src/s2/s2loop.cc
   s2geometry/src/s2/s2loop_measures.cc
-  s2geometry/src/s2/s2max_distance_targets.cc
   s2geometry/src/s2/s2measures.cc
   s2geometry/src/s2/s2memory_tracker.cc
   s2geometry/src/s2/s2metrics.cc
+  s2geometry/src/s2/s2max_distance_targets.cc
   s2geometry/src/s2/s2min_distance_targets.cc
   s2geometry/src/s2/s2padded_cell.cc
   s2geometry/src/s2/s2point_compression.cc
@@ -92,11 +88,10 @@ add_library(s2
   s2geometry/src/s2/s2predicates.cc
   s2geometry/src/s2/s2projections.cc
   s2geometry/src/s2/s2r2rect.cc
-  s2geometry/src/s2/s2random.cc
+  s2geometry/src/s2/s2region.cc
+  s2geometry/src/s2/s2region_term_indexer.cc
   s2geometry/src/s2/s2region_coverer.cc
   s2geometry/src/s2/s2region_intersection.cc
-  s2geometry/src/s2/s2region_sharder.cc
-  s2geometry/src/s2/s2region_term_indexer.cc
   s2geometry/src/s2/s2region_union.cc
   s2geometry/src/s2/s2shape_index.cc
   s2geometry/src/s2/s2shape_index_buffered_region.cc
@@ -107,9 +102,7 @@ add_library(s2
   s2geometry/src/s2/s2shapeutil_coding.cc
   s2geometry/src/s2/s2shapeutil_contains_brute_force.cc
   s2geometry/src/s2/s2shapeutil_conversion.cc
-  s2geometry/src/s2/s2shapeutil_count_vertices.cc
   s2geometry/src/s2/s2shapeutil_edge_iterator.cc
-  s2geometry/src/s2/s2shapeutil_edge_wrap.cc
   s2geometry/src/s2/s2shapeutil_get_reference_point.cc
   s2geometry/src/s2/s2shapeutil_visit_crossing_edge_pairs.cc
   s2geometry/src/s2/s2text_format.cc
@@ -132,6 +125,11 @@ else()
   #     -Wno-attributes -Wno-deprecated-declarations "-Wno-comment" -Wno-pedantic
   # )
 endif()
+
+# HACK ALERT *** HACK ALERT *** HACK ALERT
+# s2geometry doesn't bother to namespace any of their symbols, and neither does
+# libfsst. Both of them define an "Encoder" :facepalm:. This seems to work.
+target_compile_definitions(s2 PUBLIC Encoder=S2Encoder)
 
 target_include_directories(s2 PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/s2geometry/src>)
 target_link_libraries(
