@@ -7,6 +7,7 @@
 #include "s2/s2shapeutil_coding.h"
 #include "s2geography/geography.h"
 
+#include "s2_geography_serde.hpp"
 #include "s2_types.hpp"
 #include "s2geography/wkt-reader.h"
 #include "s2geography/wkt-writer.h"
@@ -18,40 +19,61 @@ namespace duckdb_s2 {
 struct S2GeogFromText {
   static void Register(DatabaseInstance& instance) {
     auto fn = ScalarFunction("s2_geogfromtext", {LogicalType::VARCHAR},
-                             Types::S2_GEOGRAPHY(), Execute);
+                             Types::GEOGRAPHY(), ExecuteFn);
     ExtensionUtil::RegisterFunction(instance, fn);
+    ExtensionUtil::RegisterCastFunction(instance, LogicalType::VARCHAR,
+                                        Types::GEOGRAPHY(), BoundCastInfo(ExecuteCast),
+                                        1);
   }
 
-  static inline void Execute(DataChunk& args, ExpressionState& state, Vector& result) {
-    s2geography::WKTReader reader;
-    Encoder encoder{};
+  static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
+    Execute(args.data[0], result, args.size());
+  }
 
-    UnaryExecutor::Execute<string_t, string_t>(
-        args.data[0], result, args.size(), [&](string_t wkt) {
-          auto geog = reader.read_feature(wkt.GetData(), wkt.GetSize());
-          encoder.Resize(0);
-          geog->EncodeTagged(&encoder);
-          return StringVector::AddStringOrBlob(
-              result, string_t{encoder.base(), static_cast<uint32_t>(encoder.length())});
-        });
+  static inline bool ExecuteCast(Vector& source, Vector& result, idx_t count,
+                                 CastParameters& parameters) {
+    Execute(source, result, count);
+    return true;
+  }
+
+  static inline void Execute(Vector& source, Vector& result, idx_t count) {
+    GeographyEncoder encoder;
+    s2geography::WKTReader reader;
+
+    UnaryExecutor::Execute<string_t, string_t>(source, result, count, [&](string_t wkt) {
+      auto geog = reader.read_feature(wkt.GetData(), wkt.GetSize());
+      return StringVector::AddStringOrBlob(result, encoder.Encode(*geog));
+    });
   }
 };
 
 struct S2AsText {
   static void Register(DatabaseInstance& instance) {
-    auto fn = ScalarFunction("s2_astext", {Types::S2_GEOGRAPHY()}, LogicalType::VARCHAR,
-                             Execute);
+    auto fn = ScalarFunction("s2_astext", {Types::GEOGRAPHY()}, LogicalType::VARCHAR,
+                             ExecuteFn);
     ExtensionUtil::RegisterFunction(instance, fn);
+    ExtensionUtil::RegisterCastFunction(instance, Types::GEOGRAPHY(),
+                                        LogicalType::VARCHAR, BoundCastInfo(ExecuteCast),
+                                        1);
   }
 
-  static inline void Execute(DataChunk& args, ExpressionState& state, Vector& result) {
+  static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
+    Execute(args.data[0], result, args.size());
+  }
+
+  static inline bool ExecuteCast(Vector& source, Vector& result, idx_t count,
+                                 CastParameters& parameters) {
+    Execute(source, result, count);
+    return true;
+  }
+
+  static inline void Execute(Vector& source, Vector& result, idx_t count) {
+    GeographyDecoder decoder;
     s2geography::WKTWriter writer;
 
     UnaryExecutor::Execute<string_t, string_t>(
-        args.data[0], result, args.size(), [&](string_t geog_str) {
-          Decoder decoder{geog_str.GetData(), geog_str.GetSize()};
-          std::unique_ptr<s2geography::Geography> geog =
-              s2geography::Geography::DecodeTagged(&decoder);
+        source, result, count, [&](string_t geog_str) {
+          auto geog = decoder.Decode(geog_str);
           std::string wkt = writer.write_feature(*geog);
           return StringVector::AddString(result, wkt);
         });

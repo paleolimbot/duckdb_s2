@@ -22,16 +22,16 @@ LogicalType Types::S2_CELL() {
   return type;
 }
 
-LogicalType Types::S2_GEOGRAPHY() {
+LogicalType Types::GEOGRAPHY() {
   LogicalType type = LogicalType::BLOB;
-  type.SetAlias("S2_GEOGRAPHY");
+  type.SetAlias("GEOGRAPHY");
   return type;
 }
 
 void RegisterTypes(DatabaseInstance& instance) {
   ExtensionUtil::RegisterType(instance, "S2_POINT", Types::S2_POINT());
   ExtensionUtil::RegisterType(instance, "S2_CELL", Types::S2_CELL());
-  ExtensionUtil::RegisterType(instance, "S2_GEOGRAPHY", Types::S2_GEOGRAPHY());
+  ExtensionUtil::RegisterType(instance, "GEOGRAPHY", Types::GEOGRAPHY());
 }
 
 }  // namespace duckdb_s2

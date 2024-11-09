@@ -11,7 +11,7 @@ namespace duckdb_s2 {
 struct Types {
 	static LogicalType S2_POINT();
     static LogicalType S2_CELL();
-    static LogicalType S2_GEOGRAPHY();
+    static LogicalType GEOGRAPHY();
 };
 
 void RegisterTypes(DatabaseInstance &instance);
