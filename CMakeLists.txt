@@ -158,7 +158,6 @@ target_link_libraries(
     absl::strings
     absl::type_traits
     absl::utility
-    absl::vlog_is_on
     ${CMAKE_THREAD_LIBS_INIT})
 
 # Build s2geography
