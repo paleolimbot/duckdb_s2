@@ -138,7 +138,8 @@ struct S2CellFromString {
     Op op;
     UnaryExecutor::Execute<string_t, int64_t>(
         args.data[0], result, args.size(), [&](string_t arg0) {
-          return static_cast<int64_t>(op.ExecuteScalar({arg0.GetData(), arg0.GetSize()}));
+          std::string_view item_view{arg0.GetData(), static_cast<size_t>(arg0.GetSize())};
+          return static_cast<int64_t>(op.ExecuteScalar(item_view));
         });
   }
 };
