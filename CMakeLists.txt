@@ -183,7 +183,7 @@ set(EXTENSION_SOURCES
     src/s2_point_ops.cpp
     src/s2_types.cpp
     src/s2_cell_ops.cpp
-    src/s2_geography_ops.cpp)
+    src/s2_functions_io.cpp)
 
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
 build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
