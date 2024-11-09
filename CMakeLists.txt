@@ -165,6 +165,7 @@ add_library(s2::s2 ALIAS s2)
 set(S2_VERSION_MAJOR 0)
 set(S2_VERSION_MINOR 11)
 set(S2_VERSION_PATCH 1)
+set(BUILD_SHARED_LIBS OFF)
 add_subdirectory(s2geography)
 target_compile_definitions(
   s2geography
