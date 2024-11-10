@@ -6,11 +6,16 @@
 require s2
 
 query I
-SELECT s2_cell_debug_string(s2_cell_from_point(s2_geog_point(-64, 45)));
+SELECT 'POINT (-64 45)'::GEOGRAPHY::S2_CELL::VARCHAR;
 ----
 2/112230310012123001312232330210
 
 query I
-SELECT s2_cell_token(s2_cell_from_point(s2_geog_point(-64, 45)));
+SELECT s2_cell_token('POINT (-64 45)'::GEOGRAPHY::S2_CELL);
 ----
 4b59a0cd83b5de49
+
+query I
+SELECT s2_cell_from_token('4b59a0cd83b5de49');
+----
+2/112230310012123001312232330210
