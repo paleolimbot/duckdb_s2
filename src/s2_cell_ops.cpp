@@ -57,6 +57,111 @@ struct S2CellFromGeography {
   }
 };
 
+// Experimental version of a WKB parser that only handles points (or multipoints
+// with a single point). If the s2geography WKB parser were faster this probably
+// wouldn't be needed.
+struct S2CellFromWKB {
+  static void Register(DatabaseInstance& instance) {
+    auto fn = ScalarFunction("s2_cellfromwkb", {LogicalType::BLOB}, Types::S2_CELL(),
+                             ExecuteFn);
+    ExtensionUtil::RegisterFunction(instance, fn);
+  }
+
+  static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
+    return Execute(args.data[0], result, args.size());
+  }
+
+  static inline void Execute(Vector& source, Vector& result, idx_t count) {
+    uint32_t geometry_type;
+    double lnglat[2];
+
+    UnaryExecutor::Execute<string_t, int64_t>(source, result, count, [&](string_t wkb) {
+      if (wkb.GetSize() < min_valid_size) {
+        return invalid_id;
+      }
+
+      Decoder decoder(wkb.GetData(), wkb.GetSize());
+      if (decoder.avail() < min_valid_size) {
+        return invalid_id;
+      }
+
+      uint8_t little_endian = decoder.get8();
+      do {
+        if (decoder.avail() < sizeof(uint32_t)) {
+          return invalid_id;
+        }
+
+        if (little_endian) {
+          geometry_type = LittleEndian::Load32(decoder.skip(sizeof(uint32_t)));
+        } else {
+          geometry_type = BigEndian::Load32(decoder.skip(sizeof(uint32_t)));
+        }
+
+        if (geometry_type & ewkb_srid_bit) {
+          if (decoder.avail() < sizeof(uint32_t)) {
+            return invalid_id;
+          }
+
+          decoder.skip(sizeof(uint32_t));
+        }
+
+        geometry_type &= ~(ewkb_srid_bit | ewkb_zm_bits);
+        switch (geometry_type % 1000) {
+          case 1: {
+            if (decoder.avail() < (2 * sizeof(double))) {
+              return invalid_id;
+            }
+
+            if (little_endian) {
+              lnglat[0] = LittleEndian::Load<double>(decoder.skip(sizeof(double)));
+              lnglat[1] = LittleEndian::Load<double>(decoder.skip(sizeof(double)));
+            } else {
+              lnglat[0] = BigEndian::Load<double>(decoder.skip(sizeof(double)));
+              lnglat[1] = BigEndian::Load<double>(decoder.skip(sizeof(double)));
+            }
+
+            S2Point pt =
+                S2LatLng::FromDegrees(lnglat[1], lnglat[0]).Normalized().ToPoint();
+            return static_cast<int64_t>(S2CellId(pt).id());
+          }
+
+          case 4: {
+            // MULTIPOINT type
+            uint32_t num_points;
+            if (decoder.avail() < (sizeof(uint32_t) + sizeof(uint8_t))) {
+              return invalid_id;
+            }
+
+            if (little_endian) {
+              num_points = LittleEndian::Load32(decoder.skip(sizeof(uint32_t)));
+            } else {
+              num_points = BigEndian::Load32(decoder.skip(sizeof(uint32_t)));
+            }
+
+            if (num_points != 1) {
+              return invalid_id;
+            }
+
+            little_endian = decoder.get8();
+            break;
+          }
+
+          default:
+            return invalid_id;
+        }
+      } while (decoder.avail() > 0);
+
+      return invalid_id;
+    });
+  }
+
+  static constexpr uint32_t ewkb_srid_bit = 0x20000000;
+  static constexpr uint32_t ewkb_zm_bits = 0x40000000 | 0x80000000;
+  static constexpr uint32_t min_valid_size = sizeof(uint8_t) + sizeof(uint32_t);
+  static constexpr int64_t invalid_id =
+      static_cast<int64_t>(s2geography::op::cell::kCellIdSentinel);
+};
+
 struct S2CellToGeography {
   static inline bool ExecuteCast(Vector& source, Vector& result, idx_t count,
                                  CastParameters& parameters) {
@@ -253,6 +358,7 @@ void RegisterS2CellOps(DatabaseInstance& instance) {
   ExtensionUtil::RegisterCastFunction(instance, Types::GEOGRAPHY(), Types::S2_CELL(),
                                       BoundCastInfo(S2CellFromGeography::ExecuteCast), 1);
 
+  S2CellFromWKB::Register(instance);
   S2CellToString<ToToken>::Register(instance, "s2_cell_token");
   S2CellFromString<FromToken>::Register(instance, "s2_cell_from_token");
 
