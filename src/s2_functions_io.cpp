@@ -74,6 +74,12 @@ struct S2AsText {
 
     UnaryExecutor::Execute<string_t, string_t>(
         source, result, count, [&](string_t geog_str) {
+          decoder.DecodeTag(geog_str);
+          if (decoder.tag.kind == s2geography::GeographyKind::SHAPE_INDEX) {
+            return StringVector::AddString(
+                result, std::string("<S2ShapeIndex ") +
+                            std::to_string(geog_str.GetSize()) + " b>");
+          }
           auto geog = decoder.Decode(geog_str);
           std::string wkt = writer.write_feature(*geog);
           return StringVector::AddString(result, wkt);
@@ -134,10 +140,42 @@ struct S2GeogFromWKB {
   }
 };
 
+struct S2GeogPrepare {
+  static void Register(DatabaseInstance& instance) {
+    auto fn =
+        ScalarFunction("s2_prepare", {Types::GEOGRAPHY()}, Types::GEOGRAPHY(), ExecuteFn);
+    ExtensionUtil::RegisterFunction(instance, fn);
+  }
+
+  static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
+    Execute(args.data[0], result, args.size());
+  }
+
+  static inline void Execute(Vector& source, Vector& result, idx_t count) {
+    GeographyDecoder decoder;
+    GeographyEncoder encoder;
+
+    UnaryExecutor::Execute<string_t, string_t>(
+        source, result, count, [&](string_t geog_str) {
+          decoder.DecodeTag(geog_str);
+          if (decoder.tag.kind == s2geography::GeographyKind::SHAPE_INDEX) {
+            // Maybe a way to avoid copying geog_str? This case is probably rare (double
+            // call to prepare).
+            return StringVector::AddStringOrBlob(result, geog_str);
+          }
+
+          std::unique_ptr<s2geography::Geography> geog = decoder.Decode(geog_str);
+          s2geography::ShapeIndexGeography index_geog(*geog);
+          return StringVector::AddStringOrBlob(result, encoder.Encode(index_geog));
+        });
+  }
+};
+
 void RegisterS2GeographyOps(DatabaseInstance& instance) {
   S2GeogFromText::Register(instance);
   S2GeogFromWKB::Register(instance);
   S2AsText::Register(instance);
+  S2GeogPrepare::Register(instance);
 }
 
 }  // namespace duckdb_s2
