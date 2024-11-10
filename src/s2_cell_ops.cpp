@@ -7,6 +7,7 @@
 #include "s2geography/op/cell.h"
 #include "s2geography/op/point.h"
 
+#include "s2_geography_serde.hpp"
 #include "s2_types.hpp"
 
 namespace duckdb {
@@ -34,6 +35,88 @@ struct S2CellFromPoint {
           Point pt{x, y, z};
           return static_cast<int64_t>(op.ExecuteScalar(pt));
         });
+  }
+};
+
+struct S2CellFromGeography {
+  static inline bool ExecuteCast(Vector& source, Vector& result, idx_t count,
+                                 CastParameters& parameters) {
+    Execute(source, result, count);
+    return true;
+  }
+
+  static inline void Execute(Vector& source, Vector& result, idx_t count) {
+    GeographyDecoder decoder;
+
+    UnaryExecutor::Execute<string_t, int64_t>(
+        source, result, count, [&](string_t geog_str) {
+          decoder.DecodeTag(geog_str);
+
+          // If we already have a snapped cell center encoding, the last 8 inlined
+          // bytes are the little endian cell id as a uint64_t
+          if (decoder.tag.kind == s2geography::GeographyKind::CELL_CENTER &&
+              decoder.tag.covering_size == 1) {
+            uint64_t cell_id = LittleEndian::Load64(geog_str.GetData() + 4);
+            return static_cast<int64_t>(cell_id);
+          }
+
+          // Otherwise, we just need to load the geography
+          std::unique_ptr<s2geography::Geography> geog = decoder.Decode(geog_str);
+
+          // Use the Shape interface, which should work for PointGeography
+          // and EncodedShapeIndex geography. A single shape with a single
+          // edge always works here.
+          if (geog->num_shapes() != 1) {
+            return static_cast<int64_t>(S2CellId::Sentinel().id());
+          }
+
+          std::unique_ptr<S2Shape> shape = geog->Shape(0);
+          if (shape->num_edges() != 1 || shape->dimension() != 0) {
+            return static_cast<int64_t>(S2CellId::Sentinel().id());
+          }
+
+          S2CellId cell(shape->edge(0).v0);
+          return static_cast<int64_t>(cell.id());
+        });
+  }
+};
+
+struct S2CellToGeography {
+  static inline bool ExecuteCast(Vector& source, Vector& result, idx_t count,
+                                 CastParameters& parameters) {
+    Execute(source, result, count);
+    return true;
+  }
+
+  static inline void Execute(Vector& source, Vector& result, idx_t count) {
+    // Most cells will get serialized as a tag + cell_id
+    Encoder non_empty;
+    s2geography::EncodeTag tag;
+    tag.kind = s2geography::GeographyKind::CELL_CENTER;
+    tag.covering_size = 1;
+    tag.Encode(&non_empty);
+    non_empty.Ensure(sizeof(uint64_t));
+    non_empty.put64(0);
+    string_t non_empty_str{non_empty.base(), static_cast<uint32_t>(non_empty.length())};
+    char* non_empty_cell_id = non_empty_str.GetPrefixWriteable() + 4;
+
+    // Invalid cells will get serialized as an empty point
+    Encoder empty;
+    tag.kind = s2geography::GeographyKind::POINT;
+    tag.covering_size = 0;
+    tag.flags |= s2geography::EncodeTag::kFlagEmpty;
+    tag.Encode(&empty);
+    string_t empty_str{empty.base(), static_cast<uint32_t>(empty.length())};
+
+    UnaryExecutor::Execute<int64_t, string_t>(source, result, count, [&](int64_t arg0) {
+      S2CellId cell(arg0);
+      if (cell.is_valid()) {
+        std::memcpy(non_empty_cell_id, &arg0, sizeof(arg0));
+        return non_empty_str;
+      } else {
+        return empty_str;
+      }
+    });
   }
 };
 
@@ -112,35 +195,53 @@ struct S2CellVertex {
 template <typename Op>
 struct S2CellToString {
   static void Register(DatabaseInstance& instance, const char* name) {
-    auto fn = ScalarFunction(name, {Types::S2_CELL()}, LogicalType::VARCHAR, Execute);
+    auto fn = ScalarFunction(name, {Types::S2_CELL()}, LogicalType::VARCHAR, ExecuteFn);
     ExtensionUtil::RegisterFunction(instance, fn);
   }
 
-  static inline void Execute(DataChunk& args, ExpressionState& state, Vector& result) {
+  static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
+    return Execute(args.data[0], result, args.size());
+  }
+
+  static inline bool ExecuteCast(Vector& source, Vector& result, idx_t count,
+                                 CastParameters& parameters) {
+    Execute(source, result, count);
+    return true;
+  }
+
+  static inline void Execute(Vector& source, Vector& result, idx_t count) {
     Op op;
-    UnaryExecutor::Execute<int64_t, string_t>(
-        args.data[0], result, args.size(), [&](int64_t arg0) {
-          std::string_view str = op.ExecuteScalar(arg0);
-          return StringVector::AddString(
-              result, string_t{str.data(), static_cast<uint32_t>(str.size())});
-        });
+    UnaryExecutor::Execute<int64_t, string_t>(source, result, count, [&](int64_t arg0) {
+      std::string_view str = op.ExecuteScalar(arg0);
+      return StringVector::AddString(
+          result, string_t{str.data(), static_cast<uint32_t>(str.size())});
+    });
   }
 };
 
 template <typename Op>
 struct S2CellFromString {
   static void Register(DatabaseInstance& instance, const char* name) {
-    auto fn = ScalarFunction(name, {LogicalType::VARCHAR}, Types::S2_CELL(), Execute);
+    auto fn = ScalarFunction(name, {LogicalType::VARCHAR}, Types::S2_CELL(), ExecuteFn);
     ExtensionUtil::RegisterFunction(instance, fn);
   }
 
-  static inline void Execute(DataChunk& args, ExpressionState& state, Vector& result) {
+  static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
+    return Execute(args.data[0], result, args.size());
+  }
+
+  static inline bool ExecuteCast(Vector& source, Vector& result, idx_t count,
+                                 CastParameters& parameters) {
+    Execute(source, result, count);
+    return true;
+  }
+
+  static inline void Execute(Vector& source, Vector& result, idx_t count) {
     Op op;
-    UnaryExecutor::Execute<string_t, int64_t>(
-        args.data[0], result, args.size(), [&](string_t arg0) {
-          std::string_view item_view{arg0.GetData(), static_cast<size_t>(arg0.GetSize())};
-          return static_cast<int64_t>(op.ExecuteScalar(item_view));
-        });
+    UnaryExecutor::Execute<string_t, int64_t>(source, result, count, [&](string_t arg0) {
+      std::string_view item_view{arg0.GetData(), static_cast<size_t>(arg0.GetSize())};
+      return static_cast<int64_t>(op.ExecuteScalar(item_view));
+    });
   }
 };
 
@@ -212,11 +313,22 @@ struct S2CellToCell {
 void RegisterS2CellOps(DatabaseInstance& instance) {
   using namespace s2geography::op::cell;
 
-  // Some or all of these should probably be casts
+  // Explicit casts to/from string handle the debug string (better for printing)
+  ExtensionUtil::RegisterCastFunction(
+      instance, Types::S2_CELL(), LogicalType::VARCHAR,
+      BoundCastInfo(S2CellToString<ToDebugString>::ExecuteCast), 1);
+  ExtensionUtil::RegisterCastFunction(
+      instance, LogicalType::VARCHAR, Types::S2_CELL(),
+      BoundCastInfo(S2CellFromString<FromDebugString>::ExecuteCast), 1);
+
+  // Explicit from geography, but implicit cast *to* geography
+  ExtensionUtil::RegisterCastFunction(instance, Types::S2_CELL(), Types::GEOGRAPHY(),
+                                      BoundCastInfo(S2CellToGeography::ExecuteCast), 1);
+  ExtensionUtil::RegisterCastFunction(instance, Types::GEOGRAPHY(), Types::S2_CELL(),
+                                      BoundCastInfo(S2CellFromGeography::ExecuteCast), 1);
+
   S2CellFromPoint::Register(instance);
-  S2CellToString<ToDebugString>::Register(instance, "s2_cell_debug_string");
   S2CellToString<ToToken>::Register(instance, "s2_cell_token");
-  S2CellFromString<FromDebugString>::Register(instance, "s2_cell_from_debug_string");
   S2CellFromString<FromToken>::Register(instance, "s2_cell_from_token");
 
   S2CellToDouble<Area>::Register(instance, "s2_cell_area");
