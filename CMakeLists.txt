@@ -181,7 +181,6 @@ include_directories(src/include)
 set(EXTENSION_SOURCES
     src/s2_extension.cpp
     src/s2_dependencies.cpp
-    src/s2_point_ops.cpp
     src/s2_types.cpp
     src/s2_cell_ops.cpp
     src/s2_functions_io.cpp)

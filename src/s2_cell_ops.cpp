@@ -1,6 +1,4 @@
 
-#include "s2_point_ops.hpp"
-
 #include "duckdb/main/database.hpp"
 #include "duckdb/main/extension_util.hpp"
 
@@ -15,28 +13,6 @@ namespace duckdb {
 namespace duckdb_s2 {
 
 namespace {
-
-struct S2CellFromPoint {
-  static void Register(DatabaseInstance& instance) {
-    auto fn = ScalarFunction("s2_cell_from_point", {Types::S2_POINT()}, Types::S2_CELL(),
-                             Execute);
-    ExtensionUtil::RegisterFunction(instance, fn);
-  }
-
-  static inline void Execute(DataChunk& args, ExpressionState& state, Vector& result) {
-    using s2geography::op::point::Point;
-    s2geography::op::cell::FromPoint op;
-
-    auto& children = StructVector::GetEntries(args.data[0]);
-
-    TernaryExecutor::Execute<double, double, double, int64_t>(
-        *children[0], *children[1], *children[2], result, args.size(),
-        [&](double x, double y, double z) {
-          Point pt{x, y, z};
-          return static_cast<int64_t>(op.ExecuteScalar(pt));
-        });
-  }
-};
 
 struct S2CellFromGeography {
   static inline bool ExecuteCast(Vector& source, Vector& result, idx_t count,
@@ -120,75 +96,25 @@ struct S2CellToGeography {
   }
 };
 
-struct S2CellCenter {
-  static void Register(DatabaseInstance& instance) {
-    auto fn =
-        ScalarFunction("s2_cell_center", {Types::S2_CELL()}, Types::S2_POINT(), Execute);
-    ExtensionUtil::RegisterFunction(instance, fn);
-  }
-
-  static inline void Execute(DataChunk& args, ExpressionState& state, Vector& result) {
-    using s2geography::op::point::Point;
-    s2geography::op::cell::CellCenter op;
-    idx_t count = args.size();
-
-    auto& cell_id = args.data[0];
-    cell_id.Flatten(count);
-    auto cell_ids = reinterpret_cast<uint64_t*>(cell_id.GetData());
-
-    auto& children = StructVector::GetEntries(result);
-    auto& x_child = children[0];
-    auto& y_child = children[1];
-    auto& z_child = children[2];
-
-    for (idx_t i = 0; i < count; i++) {
-      Point pt = op.ExecuteScalar(cell_ids[i]);
-      x_child->SetValue(i, pt[0]);
-      y_child->SetValue(i, pt[1]);
-      z_child->SetValue(i, pt[2]);
-    }
-
-    if (count == 1) {
-      result.SetVectorType(VectorType::CONSTANT_VECTOR);
-    }
-  }
-};
-
 struct S2CellVertex {
   static void Register(DatabaseInstance& instance) {
     auto fn = ScalarFunction("s2_cell_vertex", {Types::S2_CELL(), LogicalType::TINYINT},
-                             Types::S2_POINT(), Execute);
+                             Types::GEOGRAPHY(), Execute);
     ExtensionUtil::RegisterFunction(instance, fn);
   }
 
   static inline void Execute(DataChunk& args, ExpressionState& state, Vector& result) {
     using s2geography::op::point::Point;
     s2geography::op::cell::CellVertex op;
-    idx_t count = args.size();
+    GeographyEncoder encoder;
 
-    auto& cell_id = args.data[0];
-    cell_id.Flatten(count);
-    auto cell_ids = reinterpret_cast<uint64_t*>(cell_id.GetData());
-
-    auto& vertex = args.data[1];
-    vertex.Flatten(count);
-    auto vertices = reinterpret_cast<int8_t*>(vertex.GetData());
-
-    auto& children = StructVector::GetEntries(result);
-    auto& x_child = children[0];
-    auto& y_child = children[1];
-    auto& z_child = children[2];
-
-    for (idx_t i = 0; i < count; i++) {
-      Point pt = op.ExecuteScalar(cell_ids[i], vertices[i]);
-      x_child->SetValue(i, pt[0]);
-      y_child->SetValue(i, pt[1]);
-      z_child->SetValue(i, pt[2]);
-    }
-
-    if (count == 1) {
-      result.SetVectorType(VectorType::CONSTANT_VECTOR);
-    }
+    BinaryExecutor::Execute<int64_t, uint8_t, string_t>(
+        args.data[0], args.data[1], result, args.size(),
+        [&](int64_t cell_id, int8_t vertex_id) {
+          Point pt = op.ExecuteScalar(cell_id, vertex_id);
+          s2geography::PointGeography geog({pt[0], pt[1], pt[2]});
+          return StringVector::AddStringOrBlob(result, encoder.Encode(geog));
+        });
   }
 };
 
@@ -321,13 +247,12 @@ void RegisterS2CellOps(DatabaseInstance& instance) {
       instance, LogicalType::VARCHAR, Types::S2_CELL(),
       BoundCastInfo(S2CellFromString<FromDebugString>::ExecuteCast), 1);
 
-  // Explicit from geography, but implicit cast *to* geography
+  // Explicit casts to/from geography
   ExtensionUtil::RegisterCastFunction(instance, Types::S2_CELL(), Types::GEOGRAPHY(),
                                       BoundCastInfo(S2CellToGeography::ExecuteCast), 1);
   ExtensionUtil::RegisterCastFunction(instance, Types::GEOGRAPHY(), Types::S2_CELL(),
                                       BoundCastInfo(S2CellFromGeography::ExecuteCast), 1);
 
-  S2CellFromPoint::Register(instance);
   S2CellToString<ToToken>::Register(instance, "s2_cell_token");
   S2CellFromString<FromToken>::Register(instance, "s2_cell_from_token");
 
@@ -335,7 +260,6 @@ void RegisterS2CellOps(DatabaseInstance& instance) {
   S2CellToDouble<AreaApprox>::Register(instance, "s2_cell_area_approx");
   S2CellToInt8<Level>::Register(instance, "s2_cell_level");
 
-  S2CellCenter::Register(instance);
   S2CellVertex::Register(instance);
 
   S2BinaryCellPredicate<Contains>::Register(instance, "s2_cell_contains");
