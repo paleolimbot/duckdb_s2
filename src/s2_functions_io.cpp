@@ -53,6 +53,12 @@ struct S2AsText {
     auto fn = ScalarFunction("s2_astext", {Types::GEOGRAPHY()}, LogicalType::VARCHAR,
                              ExecuteFn);
     ExtensionUtil::RegisterFunction(instance, fn);
+
+    auto fn_format =
+        ScalarFunction("s2_format", {Types::GEOGRAPHY(), LogicalType::TINYINT},
+                       LogicalType::VARCHAR, ExecuteFnPrec);
+    ExtensionUtil::RegisterFunction(instance, fn_format);
+
     ExtensionUtil::RegisterCastFunction(instance, Types::GEOGRAPHY(),
                                         LogicalType::VARCHAR, BoundCastInfo(ExecuteCast),
                                         1);
@@ -62,15 +68,26 @@ struct S2AsText {
     Execute(args.data[0], result, args.size());
   }
 
+  static inline void ExecuteFnPrec(DataChunk& args, ExpressionState& state,
+                                   Vector& result) {
+    Vector& precision = args.data[1];
+    if (precision.GetVectorType() != VectorType::CONSTANT_VECTOR) {
+      throw InvalidInputException("Can't use s2_format() with non-constant precision");
+    }
+
+    Execute(args.data[0], result, args.size(), precision.GetValue(0).GetValue<int8_t>());
+  }
+
   static inline bool ExecuteCast(Vector& source, Vector& result, idx_t count,
                                  CastParameters& parameters) {
     Execute(source, result, count);
     return true;
   }
 
-  static inline void Execute(Vector& source, Vector& result, idx_t count) {
+  static inline void Execute(Vector& source, Vector& result, idx_t count,
+                             int8_t precision = -1) {
     GeographyDecoder decoder;
-    s2geography::WKTWriter writer;
+    s2geography::WKTWriter writer(precision);
 
     UnaryExecutor::Execute<string_t, string_t>(
         source, result, count, [&](string_t geog_str) {
@@ -158,9 +175,12 @@ struct S2GeogPrepare {
     UnaryExecutor::Execute<string_t, string_t>(
         source, result, count, [&](string_t geog_str) {
           decoder.DecodeTag(geog_str);
-          if (decoder.tag.kind == s2geography::GeographyKind::SHAPE_INDEX) {
-            // Maybe a way to avoid copying geog_str? This case is probably rare (double
-            // call to prepare).
+
+          // For small geographies or something that is already prepared, don't
+          // trigger a new index. 64 bytes is arbitrary here (should be tuned).
+          if (decoder.tag.kind == s2geography::GeographyKind::SHAPE_INDEX ||
+              geog_str.GetSize() < 64) {
+            // Maybe a way to avoid copying geog_str?
             return StringVector::AddStringOrBlob(result, geog_str);
           }
 
