@@ -1,0 +1,26 @@
+# name: test/sql/s2_functions_io.test
+# description: test s2 extension cell operations
+# group: [s2]
+
+# Require statement will ensure this test is run with this extension loaded
+require s2
+
+query I
+SELECT s2_mayintersect('POINT (-64 45)'::GEOGRAPHY, 'POINT (-64 45)'::GEOGRAPHY)
+----
+true
+
+query I
+SELECT s2_mayintersect('POINT (-64 45)'::GEOGRAPHY, 'POINT (-64 46)'::GEOGRAPHY)
+----
+false
+
+query I
+SELECT s2_mayintersect('POINT (-64 45)'::GEOGRAPHY, 'POINT EMPTY'::GEOGRAPHY)
+----
+false
+
+query I
+SELECT s2_mayintersect('POINT EMPTY'::GEOGRAPHY, 'POINT (-64 46)'::GEOGRAPHY)
+----
+false

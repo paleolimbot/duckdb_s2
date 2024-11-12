@@ -191,7 +191,7 @@ struct S2GeogPrepare {
   }
 };
 
-void RegisterS2GeographyOps(DatabaseInstance& instance) {
+void RegisterS2GeographyFunctionsIO(DatabaseInstance& instance) {
   S2GeogFromText::Register(instance);
   S2GeogFromWKB::Register(instance);
   S2AsText::Register(instance);

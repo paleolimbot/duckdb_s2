@@ -1,13 +1,18 @@
 #pragma once
 
 #include "duckdb/main/database.hpp"
-#include "s2geography/geography.h"
 
 namespace duckdb {
 
 namespace duckdb_s2 {
 
-void RegisterS2GeographyOps(DatabaseInstance& instance);
+void RegisterS2GeographyFunctionsIO(DatabaseInstance& instance);
+void RegisterS2GeographyPredicates(DatabaseInstance& instance);
 
+inline void RegisterS2GeographyOps(DatabaseInstance& instance) {
+  RegisterS2GeographyFunctionsIO(instance);
+  RegisterS2GeographyPredicates(instance);
 }
+
+}  // namespace duckdb_s2
 }  // namespace duckdb
