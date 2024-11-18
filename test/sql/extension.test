@@ -1,6 +1,6 @@
-# name: test/sql/s2.test
-# description: test s2 extension
-# group: [s2]
+# name: test/sql/geography.test
+# description: test geography extension
+# group: [geography]
 
 # Before we load the extension, this will fail
 statement error
@@ -9,7 +9,7 @@ SELECT * from s2_dependencies()
 Catalog Error: Table Function with name s2_dependencies does not exist!
 
 # Require statement will ensure this test is run with this extension loaded
-require s2
+require geography
 
 query I
 SELECT dependency FROM s2_dependencies() ORDER BY dependency

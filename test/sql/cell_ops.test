@@ -1,9 +1,9 @@
 # name: test/sql/s2_cell_ops.test
-# description: test s2 extension cell operations
-# group: [s2]
+# description: test geography extension cell operations
+# group: [geography]
 
 # Require statement will ensure this test is run with this extension loaded
-require s2
+require geography
 
 query I
 SELECT 'POINT (-64 45)'::GEOGRAPHY::S2_CELL::VARCHAR;

@@ -1,9 +1,9 @@
 # name: test/sql/s2_functions_io.test
-# description: test s2 extension cell operations
-# group: [s2]
+# description: test geography extension cell operations
+# group: [geography]
 
 # Require statement will ensure this test is run with this extension loaded
-require s2
+require geography
 
 # WKT roundtrip
 query I

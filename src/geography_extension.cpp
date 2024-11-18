@@ -1,12 +1,12 @@
 #define DUCKDB_EXTENSION_MAIN
 
-#include "s2_extension.hpp"
 #include <duckdb/parser/parsed_data/create_scalar_function_info.hpp>
 #include "duckdb.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/function/scalar_function.hpp"
 #include "duckdb/main/extension_util.hpp"
+#include "geography_extension.hpp"
 
 #include "s2_cell_ops.hpp"
 #include "s2_data.hpp"
@@ -33,12 +33,12 @@ static void LoadInternal(DatabaseInstance& instance) {
   duckdb_s2::RegisterS2Data(instance);
 }
 
-void S2Extension::Load(DuckDB& db) { LoadInternal(*db.instance); }
-std::string S2Extension::Name() { return "s2"; }
+void GeographyExtension::Load(DuckDB& db) { LoadInternal(*db.instance); }
+std::string GeographyExtension::Name() { return "geography"; }
 
-std::string S2Extension::Version() const {
-#ifdef EXT_VERSION_S2
-  return EXT_VERSION_S2;
+std::string GeographyExtension::Version() const {
+#ifdef EXT_VERSION_GEOGRAPHY
+  return EXT_VERSION_GEOGRAPHY;
 #else
   return "";
 #endif
@@ -48,12 +48,14 @@ std::string S2Extension::Version() const {
 
 extern "C" {
 
-DUCKDB_EXTENSION_API void s2_init(duckdb::DatabaseInstance& db) {
+DUCKDB_EXTENSION_API void geography_init(duckdb::DatabaseInstance& db) {
   duckdb::DuckDB db_wrapper(db);
-  db_wrapper.LoadExtension<duckdb::S2Extension>();
+  db_wrapper.LoadExtension<duckdb::GeographyExtension>();
 }
 
-DUCKDB_EXTENSION_API const char* s2_version() { return duckdb::DuckDB::LibraryVersion(); }
+DUCKDB_EXTENSION_API const char* geography_version() {
+  return duckdb::DuckDB::LibraryVersion();
+}
 }
 
 #ifndef DUCKDB_EXTENSION_MAIN

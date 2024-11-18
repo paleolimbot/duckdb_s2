@@ -4,12 +4,12 @@ This repository is based on https://github.com/duckdb/extension-template, check 
 
 ---
 
-This extension, s2, allows you leverage [Google's s2geometry library](https://github.com/google/s2geometry) via the [s2geography wrapper library](https://github.com/paleolimbot/s2geography) that also powers S2 integration as an [R package](https://r-spatial.github.io/s2) and a [Python library](https://github.com/benbovy/spherely). It is preliminary and not currently published as a community extension.
+This extension, geography, allows you leverage [Google's s2geometry library](https://github.com/google/s2geometry) via the [s2geography wrapper library](https://github.com/paleolimbot/s2geography) that also powers S2 integration as an [R package](https://r-spatial.github.io/s2) and a [Python library](https://github.com/benbovy/spherely). It is preliminary and not currently published as a community extension.
 
 In general, the functions are the same as those implemented in the [spatial extension](https://duckdb.org/docs/extensions/spatial/functions.html) except they are prefixed with `s2_` instead of `st_`.
 
 ```
-LOAD s2;
+LOAD geography;
 
 D CREATE TABLE countries as SELECT name, s2_prepare(geog) as geog FROM s2_data_countries();
 D SELECT

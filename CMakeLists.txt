@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.5)
 include(FetchContent)
 
 # Set extension name here
-set(TARGET_NAME s2)
+set(TARGET_NAME geography)
 
 set(CMAKE_CXX_STANDARD 17)
 add_definitions(-DABSL_MIN_LOG_LEVEL=1)
@@ -179,7 +179,7 @@ project(${TARGET_NAME})
 include_directories(src/include)
 
 set(EXTENSION_SOURCES
-    src/s2_extension.cpp
+    src/geography_extension.cpp
     src/s2_dependencies.cpp
     src/s2_types.cpp
     src/s2_cell_ops.cpp
