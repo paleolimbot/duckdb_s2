@@ -26,7 +26,7 @@ struct S2Predicates {
 
     auto contains =
         ScalarFunction("s2_contains", {Types::GEOGRAPHY(), Types::GEOGRAPHY()},
-                       LogicalType::BOOLEAN, ExecuteMayIntersectFn);
+                       LogicalType::BOOLEAN, ExecuteContainsFn);
     ExtensionUtil::RegisterFunction(instance, contains);
 
     auto equals = ScalarFunction("s2_equals", {Types::GEOGRAPHY(), Types::GEOGRAPHY()},
