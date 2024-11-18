@@ -74,4 +74,3 @@ D SELECT
 
 The s2 extension is not currently a community extension (although could be in the future!). To use it, you'll have to grab a binary from the CI job on the main branch and load it after allowing
 unsigned extensions in your DuckDB session.
-
