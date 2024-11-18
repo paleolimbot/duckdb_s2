@@ -10,7 +10,9 @@ namespace duckdb {
 
 namespace duckdb_s2 {
 
-struct S2IsEmtpy {
+namespace {
+
+struct S2IsEmpty {
   static void Register(DatabaseInstance& instance) {
     auto fn = ScalarFunction("s2_isempty", {Types::GEOGRAPHY()}, LogicalType::BOOLEAN,
                              ExecuteFn);
@@ -21,10 +23,21 @@ struct S2IsEmtpy {
     Execute(args.data[0], result, args.size());
   }
 
-  static void Execute(Vector& geogs, Vector& result, idx_t count) {}
+  static void Execute(Vector& source, Vector& result, idx_t count) {
+    GeographyDecoder decoder;
+
+    UnaryExecutor::Execute<string_t, bool>(source, result, count, [&](string_t geog_str) {
+      decoder.DecodeTag(geog_str);
+      return decoder.tag.flags & s2geography::EncodeTag::kFlagEmpty;
+    });
+  }
 };
 
-void RegisterS2GeographyPredicates(DatabaseInstance& instance) {}
+}
+
+void RegisterS2GeographyAccessors(DatabaseInstance& instance) {
+  S2IsEmpty::Register(instance);
+}
 
 }  // namespace duckdb_s2
 }  // namespace duckdb

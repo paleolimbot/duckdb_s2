@@ -1,0 +1,16 @@
+# name: test/sql/accessors.test
+# description: test geography extension cell operations
+# group: [geography]
+
+# Require statement will ensure this test is run with this extension loaded
+require geography
+
+query I
+SELECT s2_isempty('POINT EMPTY'::GEOGRAPHY)
+----
+true
+
+query I
+SELECT s2_isempty('POINT (0 1)'::GEOGRAPHY)
+----
+false

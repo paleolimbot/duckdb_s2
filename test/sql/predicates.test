@@ -1,4 +1,4 @@
-# name: test/sql/functions_io.test
+# name: test/sql/predicates.test
 # description: test geography extension cell operations
 # group: [geography]
 
