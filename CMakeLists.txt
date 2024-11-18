@@ -116,7 +116,8 @@ add_library(s2
   s2geometry/src/s2/util/units/length-units.cc)
 
 if(WIN32)
-  target_compile_definitions(s2 PUBLIC _USE_MATH_DEFINES)
+  target_compile_definitions(s2 PUBLIC _USE_MATH_DEFINES ABSL_FORCE_WAITER_MODE=4)
+  set(S2_EXTRA_OPENSSL_LIBS crypt32)
 endif()
 
 if (MSVC)
@@ -194,8 +195,8 @@ build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
 build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
 
 # Link OpenSSL in both the static library as the loadable extension
-target_link_libraries(${EXTENSION_NAME} s2geography s2 OpenSSL::SSL OpenSSL::Crypto)
-target_link_libraries(${LOADABLE_EXTENSION_NAME} s2geography s2 OpenSSL::SSL OpenSSL::Crypto)
+target_link_libraries(${EXTENSION_NAME} s2geography s2 OpenSSL::SSL OpenSSL::Crypto ${S2_EXTRA_OPENSSL_LIBS})
+target_link_libraries(${LOADABLE_EXTENSION_NAME} s2geography s2 OpenSSL::SSL OpenSSL::Crypto ${S2_EXTRA_OPENSSL_LIBS})
 
 install(
   TARGETS ${EXTENSION_NAME} s2geography s2

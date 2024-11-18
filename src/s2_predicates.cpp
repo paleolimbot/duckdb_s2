@@ -64,7 +64,7 @@ struct S2Predicates {
 
     return ExecuteFn(
         args, state, result, [&options](UniqueGeography lhs, UniqueGeography rhs) {
-          return DispatchShapeIndexFilter(std::move(rhs), std::move(rhs), options,
+          return DispatchShapeIndexFilter(std::move(lhs), std::move(rhs), options,
                                           S2BooleanOperation::Contains);
         });
   }
@@ -73,7 +73,7 @@ struct S2Predicates {
     S2BooleanOperation::Options options;
     return ExecuteFn(
         args, state, result, [&options](UniqueGeography lhs, UniqueGeography rhs) {
-          return DispatchShapeIndexFilter(std::move(rhs), std::move(rhs), options,
+          return DispatchShapeIndexFilter(std::move(lhs), std::move(rhs), options,
                                           S2BooleanOperation::Equals);
         });
   }
