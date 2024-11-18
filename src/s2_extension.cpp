@@ -9,6 +9,7 @@
 #include "duckdb/main/extension_util.hpp"
 
 #include "s2_cell_ops.hpp"
+#include "s2_data.hpp"
 #include "s2_dependencies.hpp"
 #include "s2_geography_ops.hpp"
 #include "s2_types.hpp"
@@ -29,6 +30,7 @@ static void LoadInternal(DatabaseInstance& instance) {
   duckdb_s2::RegisterS2Dependencies(instance);
   duckdb_s2::RegisterS2CellOps(instance);
   duckdb_s2::RegisterS2GeographyOps(instance);
+  duckdb_s2::RegisterS2Data(instance);
 }
 
 void S2Extension::Load(DuckDB& db) { LoadInternal(*db.instance); }

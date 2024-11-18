@@ -184,7 +184,8 @@ set(EXTENSION_SOURCES
     src/s2_types.cpp
     src/s2_cell_ops.cpp
     src/s2_functions_io.cpp
-    src/s2_predicates.cpp)
+    src/s2_predicates.cpp
+    src/s2_data.cpp)
 
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
 build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
