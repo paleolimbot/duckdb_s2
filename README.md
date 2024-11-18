@@ -1,4 +1,4 @@
-# S2
+# DuckDB Geography
 
 This repository is based on https://github.com/duckdb/extension-template, check it out if you want to build and ship your own DuckDB extension.
 

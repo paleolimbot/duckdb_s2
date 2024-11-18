@@ -1,0 +1,44 @@
+# name: test/sql/functions_io.test
+# description: test geography extension cell operations
+# group: [geography]
+
+# Require statement will ensure this test is run with this extension loaded
+require geography
+
+statement error
+SELECT s2_data_city('Halifax');
+----
+Invalid Input Error: No entry for item 'Halifax'
+
+query I
+SELECT s2_data_city('Vancouver').s2_format(6);
+----
+POINT (-123.12359 49.275362)
+
+# Check that the content of cities.tsv is the same as the content of s2_data_cities()
+statement ok
+CREATE TABLE cities_tsv AS SELECT name, population, geog::GEOGRAPHY as geog FROM '__WORKING_DIRECTORY__/data/cities.tsv';
+
+query I
+SELECT count(*) from cities_tsv;
+----
+243
+
+query I
+SELECT sum((cities_tsv.geog.s2_format(9) = cities.geog.s2_format(9))::INTEGER) FROM cities_tsv INNER JOIN s2_data_cities() as cities ON cities_tsv.name = cities.name;
+----
+243
+
+# Check that the content of countries.tsv is the same as the content of s2_data_countries()
+statement ok
+CREATE TABLE countries_tsv AS SELECT name, continent, geog::GEOGRAPHY as geog FROM '__WORKING_DIRECTORY__/data/countries.tsv';
+
+query I
+SELECT count(*) from countries_tsv;
+----
+177
+
+query I
+SELECT sum((countries_tsv.geog.s2_format(9) = countries.geog.s2_format(9))::INTEGER) FROM countries_tsv INNER JOIN s2_data_countries() as countries ON countries_tsv.name = countries.name;
+----
+177

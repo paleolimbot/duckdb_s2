@@ -127,6 +127,50 @@ void S2DataCountriesScan(ClientContext& context, TableFunctionInput& data_p,
   output.SetCardinality(end - start);
 }
 
+template <typename T>
+const std::vector<T>& ItemList();
+
+template <>
+const std::vector<Country>& ItemList() {
+  return kCountries;
+}
+
+template <>
+const std::vector<City>& ItemList() {
+  return kCities;
+}
+
+template <typename T>
+struct S2DataScalar {
+  static void Register(DatabaseInstance& instance, const char* fn_name) {
+    auto fn =
+        ScalarFunction(fn_name, {LogicalType::VARCHAR}, Types::GEOGRAPHY(), ExecuteFn);
+    ExtensionUtil::RegisterFunction(instance, fn);
+  }
+
+  static void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
+    s2geography::WKTReader reader;
+    GeographyEncoder encoder;
+
+    std::unordered_map<std::string, const char*> cache;
+    for (const T& item : ItemList<T>()) {
+      cache.insert({item.name, item.geog_wkt});
+    }
+
+    UnaryExecutor::Execute<string_t, string_t>(
+        args.data[0], result, args.size(), [&](string_t name) {
+          std::string name_str(name.GetData(), name.GetSize());
+          auto item = cache.find(name_str);
+          if (item == cache.end()) {
+            throw InvalidInputException(std::string("No entry for item '") + name_str + "'");
+          }
+
+          auto geog = reader.read_feature(item->second);
+          return StringVector::AddStringOrBlob(result, encoder.Encode(*geog));
+        });
+  }
+};
+
 }  // namespace
 
 void RegisterS2Data(DatabaseInstance& instance) {
@@ -136,6 +180,9 @@ void RegisterS2Data(DatabaseInstance& instance) {
   TableFunction countries_func("s2_data_countries", {}, S2DataCountriesScan,
                                S2DataCountriesBind);
   ExtensionUtil::RegisterFunction(instance, countries_func);
+
+  S2DataScalar<City>::Register(instance, "s2_data_city");
+  S2DataScalar<Country>::Register(instance, "s2_data_country");
 }
 
 }  // namespace duckdb_s2
