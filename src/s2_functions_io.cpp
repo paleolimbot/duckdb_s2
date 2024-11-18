@@ -10,6 +10,7 @@
 #include "s2_geography_serde.hpp"
 #include "s2_types.hpp"
 #include "s2geography/geoarrow.h"
+#include "s2geography/wkb.h"
 #include "s2geography/wkt-reader.h"
 #include "s2geography/wkt-writer.h"
 
@@ -109,50 +110,42 @@ struct S2GeogFromWKB {
     auto fn = ScalarFunction("s2_geogfromwkb", {LogicalType::BLOB}, Types::GEOGRAPHY(),
                              ExecuteFn);
     ExtensionUtil::RegisterFunction(instance, fn);
-    ExtensionUtil::RegisterCastFunction(instance, LogicalType::BLOB, Types::GEOGRAPHY(),
-                                        BoundCastInfo(ExecuteCast), 1);
   }
 
   static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
     Execute(args.data[0], result, args.size());
   }
 
-  static inline bool ExecuteCast(Vector& source, Vector& result, idx_t count,
-                                 CastParameters& parameters) {
-    Execute(source, result, count);
-    return true;
+  static inline void Execute(Vector& source, Vector& result, idx_t count) {
+    s2geography::WKBReader reader;
+    GeographyEncoder encoder;
+
+    UnaryExecutor::Execute<string_t, string_t>(source, result, count, [&](string_t wkb) {
+      std::unique_ptr<s2geography::Geography> geog =
+          reader.ReadFeature(std::string_view(wkb.GetData(), wkb.GetSize()));
+      return StringVector::AddStringOrBlob(result, encoder.Encode(*geog));
+    });
+  }
+};
+
+struct S2AsWKB {
+  static void Register(DatabaseInstance& instance) {
+    auto fn =
+        ScalarFunction("s2_aswkb", {Types::GEOGRAPHY()}, LogicalType::BLOB, ExecuteFn);
+    ExtensionUtil::RegisterFunction(instance, fn);
+  }
+
+  static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
+    Execute(args.data[0], result, args.size());
   }
 
   static inline void Execute(Vector& source, Vector& result, idx_t count) {
-    GeographyEncoder encoder;
-
-    // Hack to get around lack of WKBReader at the moment
-    s2geography::geoarrow::Reader reader;
-    reader.Init(s2geography::geoarrow::Reader::InputType::kWKB,
-                s2geography::geoarrow::ImportOptions());
-    std::vector<std::unique_ptr<s2geography::Geography>> geogs;
-    int32_t offsets[] = {0, 0};
-    const void* buffers[] = {nullptr, offsets, nullptr};
-    ArrowArray array{};
-    array.length = 1;
-    array.null_count = 0;
-    array.offset = 0;
-
-    array.n_buffers = 3;
-    array.n_children = 0;
-    array.buffers = buffers;
-
-    array.children = nullptr;
-    array.dictionary = nullptr;
-    array.release = [](ArrowArray*) -> void {};
-    array.private_data = nullptr;
+    GeographyDecoder decoder;
+    s2geography::WKBWriter writer;
 
     UnaryExecutor::Execute<string_t, string_t>(source, result, count, [&](string_t wkb) {
-      buffers[2] = wkb.GetData();
-      offsets[1] = static_cast<int32_t>(wkb.GetSize());
-      geogs.clear();
-      reader.ReadGeography(&array, 0, 1, &geogs);
-      return StringVector::AddStringOrBlob(result, encoder.Encode(*geogs[0]));
+      std::unique_ptr<s2geography::Geography> geog = decoder.Decode(wkb);
+      return StringVector::AddStringOrBlob(result, writer.WriteFeature(*geog));
     });
   }
 };
@@ -195,6 +188,7 @@ void RegisterS2GeographyFunctionsIO(DatabaseInstance& instance) {
   S2GeogFromText::Register(instance);
   S2GeogFromWKB::Register(instance);
   S2AsText::Register(instance);
+  S2AsWKB::Register(instance);
   S2GeogPrepare::Register(instance);
 }
 
