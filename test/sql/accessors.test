@@ -5,6 +5,7 @@
 # Require statement will ensure this test is run with this extension loaded
 require geography
 
+# IsEmpty
 query I
 SELECT s2_isempty('POINT EMPTY'::GEOGRAPHY)
 ----
@@ -14,3 +15,24 @@ query I
 SELECT s2_isempty('POINT (0 1)'::GEOGRAPHY)
 ----
 false
+
+# Area
+query I
+SELECT s2_area('POINT EMPTY'::GEOGRAPHY)
+----
+0
+
+query I
+SELECT s2_area('POINT (0 1)'::GEOGRAPHY)
+----
+0
+
+query I
+SELECT s2_area('LINESTRING (0 1, 2 3)'::GEOGRAPHY)
+----
+0
+
+query I
+SELECT s2_area('POLYGON ((0 0, 0 1, 1 0, 0 0))'::GEOGRAPHY).round()
+----
+6182489131
