@@ -115,8 +115,11 @@ add_library(s2
   s2geometry/src/s2/util/math/mathutil.cc
   s2geometry/src/s2/util/units/length-units.cc)
 
-if (MSVC)
+if(WIN32)
   target_compile_definitions(s2 PUBLIC _USE_MATH_DEFINES)
+endif()
+
+if (MSVC)
   target_compile_definitions(s2 PUBLIC NOMINMAX)
   target_compile_options(s2 PUBLIC /J)
 else()
