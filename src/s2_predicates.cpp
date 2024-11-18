@@ -10,6 +10,8 @@ namespace duckdb {
 
 namespace duckdb_s2 {
 
+namespace {
+
 struct S2Predicates {
   static void Register(DatabaseInstance& instance) {
     auto mayintersect =
@@ -150,6 +152,8 @@ struct S2Predicates {
     }
   }
 };
+
+}  // namespace
 
 void RegisterS2GeographyPredicates(DatabaseInstance& instance) {
   S2Predicates::Register(instance);
