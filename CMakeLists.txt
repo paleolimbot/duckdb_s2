@@ -1,12 +1,18 @@
 cmake_minimum_required(VERSION 3.5)
 
-include(FetchContent)
-
 # Set extension name here
 set(TARGET_NAME geography)
 
+# Required for S2
 set(CMAKE_CXX_STANDARD 17)
+
+# Abseil logging kicks in for S2 in debug mode; forcing the waiter
+# mode is needed to avoid undefined symbols when linking on rtools Windows
 add_definitions(-DABSL_MIN_LOG_LEVEL=1)
+
+if (WIN32 AND NOT MSVC)
+  add_definitions(-DABSL_FORCE_WAITER_MODE=4)
+endif()
 
 # DuckDB's extension distribution supports vcpkg. As such, dependencies can be added in ./vcpkg.json and then
 # used in cmake with find_package. Feel free to remove or replace with other dependencies.
@@ -115,13 +121,11 @@ add_library(s2
   s2geometry/src/s2/util/math/mathutil.cc
   s2geometry/src/s2/util/units/length-units.cc)
 
-if(WIN32)
-  target_compile_definitions(s2 PUBLIC _USE_MATH_DEFINES ABSL_FORCE_WAITER_MODE=4)
-  set(S2_EXTRA_OPENSSL_LIBS crypt32)
-endif()
-
-if (MSVC)
-  target_compile_definitions(s2 PUBLIC NOMINMAX)
+if(WIN32 AND NOT MSVC)
+  target_compile_definitions(s2 PUBLIC _USE_MATH_DEFINES)
+  set(S2_EXTRA_OPENSSL_LIBS crypt32 z ws2_32 gdi32 crypt32)
+elseif (MSVC)
+  target_compile_definitions(s2 PUBLIC NOMINMAX _USE_MATH_DEFINES)
   target_compile_options(s2 PUBLIC /J)
 else()
   # target_compile_definitions(s2
