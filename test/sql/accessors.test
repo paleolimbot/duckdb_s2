@@ -36,3 +36,45 @@ query I
 SELECT s2_area('POLYGON ((0 0, 0 1, 1 0, 0 0))'::GEOGRAPHY).round()
 ----
 6182489131
+
+# Perimeter
+query I
+SELECT s2_perimeter('POINT EMPTY'::GEOGRAPHY)
+----
+0
+
+query I
+SELECT s2_perimeter('POINT (0 1)'::GEOGRAPHY)
+----
+0
+
+query I
+SELECT s2_perimeter('LINESTRING (0 1, 2 3)'::GEOGRAPHY)
+----
+0
+
+query I
+SELECT s2_perimeter('POLYGON ((0 0, 0 1, 1 0, 0 0))'::GEOGRAPHY).round()
+----
+379640
+
+# Length
+query I
+SELECT s2_length('POINT EMPTY'::GEOGRAPHY)
+----
+0
+
+query I
+SELECT s2_length('POINT (0 1)'::GEOGRAPHY)
+----
+0
+
+query I
+SELECT s2_length('POLYGON ((0 0, 0 1, 1 0, 0 0))'::GEOGRAPHY)
+----
+0
+
+query I
+SELECT s2_length('LINESTRING (0 1, 2 3)'::GEOGRAPHY).round()
+----
+314403

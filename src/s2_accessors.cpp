@@ -65,7 +65,8 @@ struct S2Area {
               return 0.0;
             default: {
               auto geog = decoder.Decode(geog_str);
-              return s2geography::s2_area(*geog) * S2Earth::RadiusMeters();
+              return s2geography::s2_area(*geog) * S2Earth::RadiusMeters() *
+                     S2Earth::RadiusMeters();
             }
           }
         });
