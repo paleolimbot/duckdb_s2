@@ -14,7 +14,7 @@ set(CMAKE_CXX_STANDARD 17)
 add_definitions(-DABSL_MIN_LOG_LEVEL=1)
 if (WIN32 AND NOT MSVC)
   set(CMAKE_CXX_FLAGS_RELEASE ${CMAKE_CXX_FLAGS_RELEASE} -DABSL_FORCE_WAITER_MODE=4)
-  set(CMAKE_CXX_FLAGS_DEBUG ${CMAKE_CXX_FLAGS_RELEASE} -DABSL_FORCE_WAITER_MODE=4)
+  set(CMAKE_CXX_FLAGS_DEBUG ${CMAKE_CXX_FLAGS_DEBUG} -DABSL_FORCE_WAITER_MODE=4)
 endif()
 
 # DuckDB's extension distribution supports vcpkg. As such, dependencies can be added in ./vcpkg.json and then
