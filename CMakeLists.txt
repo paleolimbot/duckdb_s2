@@ -7,11 +7,14 @@ set(TARGET_NAME geography)
 set(CMAKE_CXX_STANDARD 17)
 
 # Abseil logging kicks in for S2 in debug mode; forcing the waiter
-# mode is needed to avoid undefined symbols when linking on rtools Windows
+# mode is needed to avoid undefined symbols when linking on rtools Windows.
+# The ABSL_FORCE_WAITER_MODE flag has to be global because it's needed when
+# compiling Abseil itself (whereas the log level is local to s2 and any libraries
+# that include its headers (which is all the libraries here).
 add_definitions(-DABSL_MIN_LOG_LEVEL=1)
-
 if (WIN32 AND NOT MSVC)
-  add_definitions(-DABSL_FORCE_WAITER_MODE=4)
+  set(CMAKE_CXX_FLAGS_RELEASE ${CMAKE_CXX_FLAGS_RELEASE} -DABSL_FORCE_WAITER_MODE=4)
+  set(CMAKE_CXX_FLAGS_DEBUG ${CMAKE_CXX_FLAGS_RELEASE} -DABSL_FORCE_WAITER_MODE=4)
 endif()
 
 # DuckDB's extension distribution supports vcpkg. As such, dependencies can be added in ./vcpkg.json and then
