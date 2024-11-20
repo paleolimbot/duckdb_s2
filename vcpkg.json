@@ -2,5 +2,10 @@
   "dependencies": [
     "openssl",
     "abseil"
-  ]
+  ],
+  "vcpkg-configuration": {
+    "overlay-ports": [
+      "./vcpkg_ports"
+    ]
+  }
 }
