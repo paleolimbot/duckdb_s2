@@ -1,7 +1,7 @@
 {
   "dependencies": [
     "openssl",
-    "abseil"
+    {"name": "abseil", "features": ["cxx17"]}
   ],
   "vcpkg-configuration": {
     "overlay-ports": [
