@@ -6,14 +6,16 @@ set(TARGET_NAME geography)
 # Required for S2
 set(CMAKE_CXX_STANDARD 17)
 
-# DuckDB's extension distribution supports vcpkg. As such, dependencies can be added in ./vcpkg.json and then
-# used in cmake with find_package. Feel free to remove or replace with other dependencies.
-# Note that it should also be removed from vcpkg.json to prevent needlessly installing it..
+# DuckDB's extension distribution supports vcpkg. As such, dependencies can be
+# added in ./vcpkg.json and then used in cmake with find_package. Feel free to
+# remove or replace with other dependencies. Note that it should also be removed
+# from vcpkg.json to prevent needlessly installing it..
 find_package(OpenSSL REQUIRED)
 find_package(absl REQUIRED)
 
 # S2's CMake is pretty awful so we just build the library ourselves
-add_library(s2
+add_library(
+  s2
   s2geometry/src/s2/encoded_s2cell_id_vector.cc
   s2geometry/src/s2/encoded_s2point_vector.cc
   s2geometry/src/s2/encoded_s2shape_index.cc
@@ -116,49 +118,48 @@ add_library(s2
 if(WIN32 AND NOT MSVC)
   target_compile_definitions(s2 PUBLIC _USE_MATH_DEFINES)
   set(S2_EXTRA_OPENSSL_LIBS crypt32 z ws2_32 gdi32 crypt32)
-elseif (MSVC)
+elseif(MSVC)
   target_compile_definitions(s2 PUBLIC NOMINMAX _USE_MATH_DEFINES)
   target_compile_options(s2 PUBLIC /J)
 else()
-  # target_compile_definitions(s2
-  #   PRIVATE
-  #     -Wno-attributes -Wno-deprecated-declarations "-Wno-comment" -Wno-pedantic
-  # )
+  # target_compile_definitions(s2 PRIVATE -Wno-attributes
+  # -Wno-deprecated-declarations "-Wno-comment" -Wno-pedantic )
 endif()
 
-# HACK ALERT *** HACK ALERT *** HACK ALERT
-# s2geometry doesn't bother to namespace any of their symbols, and neither does
-# libfsst. Both of them define an "Encoder" :facepalm:. This seems to work.
+# HACK ALERT *** HACK ALERT *** HACK ALERT s2geometry doesn't bother to
+# namespace any of their symbols, and neither does libfsst. Both of them define
+# an "Encoder" :facepalm:. This seems to work.
 target_compile_definitions(s2 PUBLIC Encoder=S2Encoder)
 
-target_include_directories(s2 PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/s2geometry/src>)
+target_include_directories(
+  s2 PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/s2geometry/src>)
 target_link_libraries(
-    s2
-    ${OPENSSL_LIBRARIES}
-    absl::base
-    absl::btree
-    absl::check
-    absl::config
-    absl::core_headers
-    absl::dynamic_annotations
-    absl::endian
-    absl::fixed_array
-    absl::flags
-    absl::flat_hash_map
-    absl::flat_hash_set
-    absl::hash
-    absl::inlined_vector
-    absl::int128
-    absl::log
-    absl::log_severity
-    absl::memory
-    absl::span
-    absl::status
-    absl::str_format
-    absl::strings
-    absl::type_traits
-    absl::utility
-    ${CMAKE_THREAD_LIBS_INIT})
+  s2
+  ${OPENSSL_LIBRARIES}
+  absl::base
+  absl::btree
+  absl::check
+  absl::config
+  absl::core_headers
+  absl::dynamic_annotations
+  absl::endian
+  absl::fixed_array
+  absl::flags
+  absl::flat_hash_map
+  absl::flat_hash_set
+  absl::hash
+  absl::inlined_vector
+  absl::int128
+  absl::log
+  absl::log_severity
+  absl::memory
+  absl::span
+  absl::status
+  absl::str_format
+  absl::strings
+  absl::type_traits
+  absl::utility
+  ${CMAKE_THREAD_LIBS_INIT})
 
 # Build s2geography
 add_library(s2::s2 ALIAS s2)
@@ -168,9 +169,7 @@ set(S2_VERSION_PATCH 1)
 set(BUILD_SHARED_LIBS OFF)
 add_subdirectory(s2geography)
 target_compile_definitions(
-  s2geography
-    PRIVATE
-      -DGEOARROW_FAST_FLOAT_NAMESPACE=duckdb_fast_float)
+  s2geography PRIVATE -DGEOARROW_FAST_FLOAT_NAMESPACE=duckdb_fast_float)
 
 set(EXTENSION_NAME ${TARGET_NAME}_extension)
 set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
@@ -192,8 +191,10 @@ build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
 build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
 
 # Link OpenSSL in both the static library as the loadable extension
-target_link_libraries(${EXTENSION_NAME} s2geography s2 OpenSSL::SSL OpenSSL::Crypto ${S2_EXTRA_OPENSSL_LIBS})
-target_link_libraries(${LOADABLE_EXTENSION_NAME} s2geography s2 OpenSSL::SSL OpenSSL::Crypto ${S2_EXTRA_OPENSSL_LIBS})
+target_link_libraries(${EXTENSION_NAME} s2geography s2 OpenSSL::SSL
+                      OpenSSL::Crypto ${S2_EXTRA_OPENSSL_LIBS})
+target_link_libraries(${LOADABLE_EXTENSION_NAME} s2geography s2 OpenSSL::SSL
+                      OpenSSL::Crypto ${S2_EXTRA_OPENSSL_LIBS})
 
 install(
   TARGETS ${EXTENSION_NAME} s2geography s2
