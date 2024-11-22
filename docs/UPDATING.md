@@ -1,11 +1,11 @@
-# Extension updating 
-When cloning this template, the target version of DuckDB should be the latest stable release of DuckDB. However, there 
+# Extension updating
+When cloning this template, the target version of DuckDB should be the latest stable release of DuckDB. However, there
 will inevitably come a time when a new DuckDB is released and the extension repository needs updating. This process goes
 as follows:
 
 - Bump submodules
   - `./duckdb` should be set to latest tagged release
-  - `./extension-ci-tools` should be set to updated branch corresponding to latest DuckDB release. So if you're building for DuckDB `v1.1.0` there will be a branch in `extension-ci-tools` named `v1.1.0` to which you should check out. 
+  - `./extension-ci-tools` should be set to updated branch corresponding to latest DuckDB release. So if you're building for DuckDB `v1.1.0` there will be a branch in `extension-ci-tools` named `v1.1.0` to which you should check out.
 - Bump versions in `./github/workflows`
   - `duckdb_version` input in `duckdb-stable-build` job in `MainDistributionPipeline.yml` should be set to latest tagged release
   - `duckdb_version` input in `duckdb-stable-deploy` job in `MainDistributionPipeline.yml` should be set to latest tagged release

@@ -162,7 +162,8 @@ struct S2DataScalar {
           std::string name_str(name.GetData(), name.GetSize());
           auto item = cache.find(name_str);
           if (item == cache.end()) {
-            throw InvalidInputException(std::string("No entry for item '") + name_str + "'");
+            throw InvalidInputException(std::string("No entry for item '") + name_str +
+                                        "'");
           }
 
           auto geog = reader.read_feature(item->second);
