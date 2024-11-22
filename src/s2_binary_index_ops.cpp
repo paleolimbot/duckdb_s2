@@ -5,7 +5,10 @@
 #include "s2/s2cell_union.h"
 #include "s2_geography_serde.hpp"
 #include "s2_types.hpp"
+
 #include "s2geography/build.h"
+
+#include "global_options.hpp"
 
 namespace duckdb {
 
@@ -47,15 +50,6 @@ struct S2BinaryIndexOp {
     auto union_ = ScalarFunction("s2_union", {Types::GEOGRAPHY(), Types::GEOGRAPHY()},
                                  Types::GEOGRAPHY(), ExecuteUnionFn);
     ExtensionUtil::RegisterFunction(instance, intersection);
-  }
-
-  static void InitBooleanOperationOptions(S2BooleanOperation::Options* options) {
-    options->set_polygon_model(S2BooleanOperation::PolygonModel::CLOSED);
-    options->set_polyline_model(S2BooleanOperation::PolylineModel::CLOSED);
-  }
-
-  static void InitGlobalOptions(s2geography::GlobalOptions* options) {
-    InitBooleanOperationOptions(&options->boolean_operation);
   }
 
   using UniqueGeography = std::unique_ptr<s2geography::Geography>;

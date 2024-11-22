@@ -183,7 +183,7 @@ set(EXTENSION_SOURCES
     src/s2_types.cpp
     src/s2_cell_ops.cpp
     src/s2_functions_io.cpp
-    src/s2_predicates.cpp
+    src/s2_binary_index_ops.cpp
     src/s2_data.cpp
     src/s2_accessors.cpp)
 
