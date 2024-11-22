@@ -45,11 +45,11 @@ struct S2BinaryIndexOp {
     auto difference =
         ScalarFunction("s2_difference", {Types::GEOGRAPHY(), Types::GEOGRAPHY()},
                        Types::GEOGRAPHY(), ExecuteDifferenceFn);
-    ExtensionUtil::RegisterFunction(instance, intersection);
+    ExtensionUtil::RegisterFunction(instance, difference);
 
     auto union_ = ScalarFunction("s2_union", {Types::GEOGRAPHY(), Types::GEOGRAPHY()},
                                  Types::GEOGRAPHY(), ExecuteUnionFn);
-    ExtensionUtil::RegisterFunction(instance, intersection);
+    ExtensionUtil::RegisterFunction(instance, union_);
   }
 
   using UniqueGeography = std::unique_ptr<s2geography::Geography>;
@@ -197,19 +197,19 @@ struct S2BinaryIndexOp {
 
           // If the lefthand side is empty, the intersection is the righthand side
           if (lhs_decoder.tag.flags & s2geography::EncodeTag::kFlagEmpty) {
-            return StringVector::AddString(result, rhs_str);
+            return StringVector::AddStringOrBlob(result, rhs_str);
           }
 
           // If the righthand side is empty, the intersection is the lefthand side
           rhs_decoder.DecodeTagAndCovering(rhs_str);
           if (rhs_decoder.tag.flags & s2geography::EncodeTag::kFlagEmpty) {
-            return StringVector::AddString(result, lhs_str);
+            return StringVector::AddStringOrBlob(result, lhs_str);
           }
 
           // For definitely disjoint input, the intersection is empty
           if (!CoveringMayIntersect(lhs_decoder, rhs_decoder, &intersection)) {
             auto geog = make_uniq<s2geography::GeographyCollection>();
-            return StringVector::AddString(result, encoder.Encode(*geog));
+            return StringVector::AddStringOrBlob(result, encoder.Encode(*geog));
           }
 
           // TODO: needs some overloads in s2geography to work directly on the index
@@ -219,7 +219,7 @@ struct S2BinaryIndexOp {
                 return make_uniq<s2geography::GeographyCollection>();
               });
 
-          return StringVector::AddString(result, encoder.Encode(*geog));
+          return StringVector::AddStringOrBlob(result, encoder.Encode(*geog));
         });
   }
 
@@ -239,19 +239,19 @@ struct S2BinaryIndexOp {
           // If the lefthand side is empty, the difference is also empty
           if (lhs_decoder.tag.flags & s2geography::EncodeTag::kFlagEmpty) {
             auto geog = make_uniq<s2geography::GeographyCollection>();
-            return StringVector::AddString(result, encoder.Encode(*geog));
+            return StringVector::AddStringOrBlob(result, encoder.Encode(*geog));
           }
 
           // If the righthand side is empty, the difference is the lefthand side
           rhs_decoder.DecodeTagAndCovering(rhs_str);
           if (rhs_decoder.tag.flags & s2geography::EncodeTag::kFlagEmpty) {
-            return StringVector::AddString(result, lhs_str);
+            return StringVector::AddStringOrBlob(result, lhs_str);
           }
 
           // For definitely disjoint input, the intersection is the lefthand side
           if (!CoveringMayIntersect(lhs_decoder, rhs_decoder, &intersection)) {
             auto geog = make_uniq<s2geography::GeographyCollection>();
-            return StringVector::AddString(result, lhs_str);
+            return StringVector::AddStringOrBlob(result, lhs_str);
           }
 
           // TODO: needs some overloads in s2geography to work directly on the index
@@ -261,7 +261,7 @@ struct S2BinaryIndexOp {
                 return make_uniq<s2geography::GeographyCollection>();
               });
 
-          return StringVector::AddString(result, encoder.Encode(*geog));
+          return StringVector::AddStringOrBlob(result, encoder.Encode(*geog));
         });
   }
 
@@ -280,13 +280,13 @@ struct S2BinaryIndexOp {
 
           // If the lefthand side is empty, the union is the righthand side
           if (lhs_decoder.tag.flags & s2geography::EncodeTag::kFlagEmpty) {
-            return StringVector::AddString(result, rhs_str);
+            return StringVector::AddStringOrBlob(result, rhs_str);
           }
 
           // If the righthand side is empty, the union is the lefthand side
           rhs_decoder.DecodeTagAndCovering(rhs_str);
           if (rhs_decoder.tag.flags & s2geography::EncodeTag::kFlagEmpty) {
-            return StringVector::AddString(result, lhs_str);
+            return StringVector::AddStringOrBlob(result, lhs_str);
           }
 
           // (No optimization for definitely disjoint binary union)
@@ -298,7 +298,7 @@ struct S2BinaryIndexOp {
                 return make_uniq<s2geography::GeographyCollection>();
               });
 
-          return StringVector::AddString(result, encoder.Encode(*geog));
+          return StringVector::AddStringOrBlob(result, encoder.Encode(*geog));
         });
   }
 
