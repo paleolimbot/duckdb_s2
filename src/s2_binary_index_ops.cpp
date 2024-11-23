@@ -212,11 +212,12 @@ struct S2BinaryIndexOp {
             return StringVector::AddStringOrBlob(result, encoder.Encode(*geog));
           }
 
-          // TODO: needs some overloads in s2geography to work directly on the index
           auto geog = DispatchShapeIndexFilter(
               lhs_decoder.Decode(lhs_str), rhs_decoder.Decode(rhs_str),
-              [](const S2ShapeIndex& lhs_index, const S2ShapeIndex& rhs_index) {
-                return make_uniq<s2geography::GeographyCollection>();
+              [&options](const S2ShapeIndex& lhs_index, const S2ShapeIndex& rhs_index) {
+                return s2geography::s2_boolean_operation(
+                    lhs_index, rhs_index, S2BooleanOperation::OpType::INTERSECTION,
+                    options);
               });
 
           return StringVector::AddStringOrBlob(result, encoder.Encode(*geog));
@@ -254,11 +255,12 @@ struct S2BinaryIndexOp {
             return StringVector::AddStringOrBlob(result, lhs_str);
           }
 
-          // TODO: needs some overloads in s2geography to work directly on the index
           auto geog = DispatchShapeIndexFilter(
               lhs_decoder.Decode(lhs_str), rhs_decoder.Decode(rhs_str),
-              [](const S2ShapeIndex& lhs_index, const S2ShapeIndex& rhs_index) {
-                return make_uniq<s2geography::GeographyCollection>();
+              [&options](const S2ShapeIndex& lhs_index, const S2ShapeIndex& rhs_index) {
+                return s2geography::s2_boolean_operation(
+                    lhs_index, rhs_index, S2BooleanOperation::OpType::DIFFERENCE,
+                    options);
               });
 
           return StringVector::AddStringOrBlob(result, encoder.Encode(*geog));
@@ -291,11 +293,11 @@ struct S2BinaryIndexOp {
 
           // (No optimization for definitely disjoint binary union)
 
-          // TODO: needs some overloads in s2geography to work directly on the index
           auto geog = DispatchShapeIndexFilter(
               lhs_decoder.Decode(lhs_str), rhs_decoder.Decode(rhs_str),
-              [](const S2ShapeIndex& lhs_index, const S2ShapeIndex& rhs_index) {
-                return make_uniq<s2geography::GeographyCollection>();
+              [&options](const S2ShapeIndex& lhs_index, const S2ShapeIndex& rhs_index) {
+                return s2geography::s2_boolean_operation(
+                    lhs_index, rhs_index, S2BooleanOperation::OpType::UNION, options);
               });
 
           return StringVector::AddStringOrBlob(result, encoder.Encode(*geog));

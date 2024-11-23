@@ -80,10 +80,10 @@ SELECT s2_intersection('POINT EMPTY'::GEOGRAPHY, 'POINT (-64 45)'::GEOGRAPHY).s2
 POINT (-64 45)
 
 # Intersection that must go through the S2BooleanOperation
-# query I
-# SELECT s2_intersection('POINT (-64 45)'::GEOGRAPHY, 'POINT (-64 45)'::GEOGRAPHY).s2_format(6);
-# ----
-# POINT (-64 45)
+query I
+SELECT s2_intersection('POINT (-64 45)'::GEOGRAPHY, 'POINT (-64 45)'::GEOGRAPHY).s2_format(6);
+----
+POINT (-64 45)
 
 # Difference of two definitely disjoint geographies
 query I
@@ -104,7 +104,25 @@ SELECT s2_difference('POINT EMPTY'::GEOGRAPHY, 'POINT (-64 45)'::GEOGRAPHY);
 GEOMETRYCOLLECTION EMPTY
 
 # Difference that must go through the S2BooleanOperation
-# query I
-# SELECT s2_difference('POINT (-64 45)'::GEOGRAPHY, 'POINT (-64 45)'::GEOGRAPHY).s2_format(6);
-# ----
-# GEOMETRYCOLLECTION EMPTY
+query I
+SELECT s2_difference('POINT (-64 45)'::GEOGRAPHY, 'POINT (-64 45)'::GEOGRAPHY).s2_format(6);
+----
+GEOMETRYCOLLECTION EMPTY
+
+# Union where rhs is EMPTY
+query I
+SELECT s2_union('POINT (-64 45)'::GEOGRAPHY, 'POINT EMPTY'::GEOGRAPHY).s2_format(6);
+----
+POINT (-64 45)
+
+# Union where lhs is EMPTY
+query I
+SELECT s2_union('POINT EMPTY'::GEOGRAPHY, 'POINT (-64 45)'::GEOGRAPHY).s2_format(6);
+----
+POINT (-64 45)
+
+# Union that must go through the S2BooleanOperation
+query I
+SELECT s2_union('POINT (-64 45)'::GEOGRAPHY, 'POINT (-64 46)'::GEOGRAPHY).s2_format(6);
+----
+MULTIPOINT ((-64 45), (-64 46))
