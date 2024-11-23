@@ -14,7 +14,7 @@ namespace duckdb_s2 {
 
 namespace {
 
-struct S2CellFromGeography {
+struct S2CellCenterFromGeography {
   static inline bool ExecuteCast(Vector& source, Vector& result, idx_t count,
                                  CastParameters& parameters) {
     Execute(source, result, count);
@@ -60,10 +60,10 @@ struct S2CellFromGeography {
 // Experimental version of a WKB parser that only handles points (or multipoints
 // with a single point). If the s2geography WKB parser were faster this probably
 // wouldn't be needed.
-struct S2CellFromWKB {
+struct S2CellCenterFromWKB {
   static void Register(DatabaseInstance& instance) {
-    auto fn = ScalarFunction("s2_cellfromwkb", {LogicalType::BLOB}, Types::S2_CELL(),
-                             ExecuteFn);
+    auto fn = ScalarFunction("s2_cellfromwkb", {LogicalType::BLOB},
+                             Types::S2_CELL_CENTER(), ExecuteFn);
     ExtensionUtil::RegisterFunction(instance, fn);
   }
 
@@ -162,7 +162,7 @@ struct S2CellFromWKB {
       static_cast<int64_t>(s2geography::op::cell::kCellIdSentinel);
 };
 
-struct S2CellToGeography {
+struct S2CellCenterToGeography {
   static inline bool ExecuteCast(Vector& source, Vector& result, idx_t count,
                                  CastParameters& parameters) {
     Execute(source, result, count);
@@ -228,6 +228,11 @@ struct S2CellToString {
   static void Register(DatabaseInstance& instance, const char* name) {
     auto fn = ScalarFunction(name, {Types::S2_CELL()}, LogicalType::VARCHAR, ExecuteFn);
     ExtensionUtil::RegisterFunction(instance, fn);
+
+    // Both of these functions apply to cells and cell centers
+    auto fn_center =
+        ScalarFunction(name, {Types::S2_CELL_CENTER()}, LogicalType::VARCHAR, ExecuteFn);
+    ExtensionUtil::RegisterFunction(instance, fn_center);
   }
 
   static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
@@ -293,8 +298,9 @@ struct S2CellToDouble {
 
 template <typename Op>
 struct S2CellToInt8 {
-  static void Register(DatabaseInstance& instance, const char* name) {
-    auto fn = ScalarFunction(name, {Types::S2_CELL()}, LogicalType::TINYINT, Execute);
+  static void Register(DatabaseInstance& instance, const char* name,
+                       LogicalType arg_type) {
+    auto fn = ScalarFunction(name, {arg_type}, LogicalType::TINYINT, Execute);
     ExtensionUtil::RegisterFunction(instance, fn);
   }
 
@@ -339,32 +345,57 @@ struct S2CellToCell {
   }
 };
 
+bool ExecuteNoopCast(Vector& source, Vector& result, idx_t count,
+                     CastParameters& parameters) {
+  result.Reference(source);
+  return true;
+}
+
 }  // namespace
 
 void RegisterS2CellOps(DatabaseInstance& instance) {
   using namespace s2geography::op::cell;
 
   // Explicit casts to/from string handle the debug string (better for printing)
+  // We use the same character representation for both cells and centers.
   ExtensionUtil::RegisterCastFunction(
       instance, Types::S2_CELL(), LogicalType::VARCHAR,
       BoundCastInfo(S2CellToString<ToDebugString>::ExecuteCast), 1);
   ExtensionUtil::RegisterCastFunction(
       instance, LogicalType::VARCHAR, Types::S2_CELL(),
       BoundCastInfo(S2CellFromString<FromDebugString>::ExecuteCast), 1);
+  ExtensionUtil::RegisterCastFunction(
+      instance, Types::S2_CELL_CENTER(), LogicalType::VARCHAR,
+      BoundCastInfo(S2CellToString<ToDebugString>::ExecuteCast), 1);
+  ExtensionUtil::RegisterCastFunction(
+      instance, LogicalType::VARCHAR, Types::S2_CELL_CENTER(),
+      BoundCastInfo(S2CellFromString<FromDebugString>::ExecuteCast), 1);
 
-  // Explicit casts to/from geography
-  ExtensionUtil::RegisterCastFunction(instance, Types::S2_CELL(), Types::GEOGRAPHY(),
-                                      BoundCastInfo(S2CellToGeography::ExecuteCast), 1);
-  ExtensionUtil::RegisterCastFunction(instance, Types::GEOGRAPHY(), Types::S2_CELL(),
-                                      BoundCastInfo(S2CellFromGeography::ExecuteCast), 1);
+  // s2_cell_center to geography can be implicit (never fails for valid input)
+  ExtensionUtil::RegisterCastFunction(
+      instance, Types::S2_CELL_CENTER(), Types::GEOGRAPHY(),
+      BoundCastInfo(S2CellCenterToGeography::ExecuteCast), 0);
 
-  S2CellFromWKB::Register(instance);
+  // geography to s2_cell_center must be explicit (can move a point up to 1 cm,
+  // fails for input that is not a single point)
+  ExtensionUtil::RegisterCastFunction(
+      instance, Types::GEOGRAPHY(), Types::S2_CELL_CENTER(),
+      BoundCastInfo(S2CellCenterFromGeography::ExecuteCast), 1);
+
+  // Explicit casts: s2_cell to/from s2_cell_center
+  ExtensionUtil::RegisterCastFunction(instance, Types::S2_CELL_CENTER(), Types::S2_CELL(),
+                                      BoundCastInfo(ExecuteNoopCast), 1);
+  ExtensionUtil::RegisterCastFunction(instance, Types::S2_CELL(), Types::S2_CELL_CENTER(),
+                                      BoundCastInfo(ExecuteNoopCast), 1);
+
+  S2CellCenterFromWKB::Register(instance);
   S2CellToString<ToToken>::Register(instance, "s2_cell_token");
   S2CellFromString<FromToken>::Register(instance, "s2_cell_from_token");
 
   S2CellToDouble<Area>::Register(instance, "s2_cell_area");
   S2CellToDouble<AreaApprox>::Register(instance, "s2_cell_area_approx");
-  S2CellToInt8<Level>::Register(instance, "s2_cell_level");
+  S2CellToInt8<Level>::Register(instance, "s2_cell_level", Types::S2_CELL());
+  S2CellToInt8<Level>::Register(instance, "s2_cell_level", Types::S2_CELL_CENTER());
 
   S2CellVertex::Register(instance);
 
