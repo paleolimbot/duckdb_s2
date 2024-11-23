@@ -228,11 +228,6 @@ struct S2CellToString {
   static void Register(DatabaseInstance& instance, const char* name) {
     auto fn = ScalarFunction(name, {Types::S2_CELL()}, LogicalType::VARCHAR, ExecuteFn);
     ExtensionUtil::RegisterFunction(instance, fn);
-
-    // Both of these functions apply to cells and cell centers
-    auto fn_center =
-        ScalarFunction(name, {Types::S2_CELL_CENTER()}, LogicalType::VARCHAR, ExecuteFn);
-    ExtensionUtil::RegisterFunction(instance, fn_center);
   }
 
   static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
@@ -347,7 +342,7 @@ struct S2CellToCell {
 
 bool ExecuteNoopCast(Vector& source, Vector& result, idx_t count,
                      CastParameters& parameters) {
-  result.Reference(source);
+  result.Reinterpret(source);
   return true;
 }
 
@@ -395,7 +390,6 @@ void RegisterS2CellOps(DatabaseInstance& instance) {
   S2CellToDouble<Area>::Register(instance, "s2_cell_area");
   S2CellToDouble<AreaApprox>::Register(instance, "s2_cell_area_approx");
   S2CellToInt8<Level>::Register(instance, "s2_cell_level", Types::S2_CELL());
-  S2CellToInt8<Level>::Register(instance, "s2_cell_level", Types::S2_CELL_CENTER());
 
   S2CellVertex::Register(instance);
 
