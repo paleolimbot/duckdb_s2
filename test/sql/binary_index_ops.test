@@ -1,0 +1,128 @@
+# name: test/sql/predicates.test
+# description: test geography extension cell operations
+# group: [geography]
+
+# Require statement will ensure this test is run with this extension loaded
+require geography
+
+# Check that empties are never preselected for intersection
+query I
+SELECT s2_mayintersect('POINT (-64 45)'::GEOGRAPHY, 'POINT (-64 45)'::GEOGRAPHY);
+----
+true
+
+query I
+SELECT s2_mayintersect('POINT (-64 45)'::GEOGRAPHY, 'POINT (-64 46)'::GEOGRAPHY);
+----
+false
+
+query I
+SELECT s2_mayintersect('POINT (-64 45)'::GEOGRAPHY, 'POINT EMPTY'::GEOGRAPHY);
+----
+false
+
+query I
+SELECT s2_mayintersect('POINT EMPTY'::GEOGRAPHY, 'POINT (-64 46)'::GEOGRAPHY);
+----
+false
+
+# Check that a true intersection can be detected
+query I
+SELECT s2_intersects(s2_data_city('Vancouver'), s2_data_country('Canada'));
+----
+true
+
+# Check that even when an item is preselected, the predicate is evaluated
+query I
+SELECT s2_mayintersect(s2_data_city('Chicago'), s2_data_country('Canada'));
+----
+true
+
+query I
+SELECT s2_intersects(s2_data_city('Chicago'), s2_data_country('Canada'));
+----
+false
+
+# Check argument order for containment
+# (point doesn't contain a polygon but polygon contains point)
+query I
+SELECT s2_contains(s2_data_city('Toronto'), s2_data_country('Canada'));
+----
+false
+
+query I
+SELECT s2_contains(s2_data_country('Canada'), s2_data_city('Toronto'));
+----
+true
+
+# Check equals operator
+query I
+SELECT s2_equals(s2_data_country('Canada'), s2_data_country('Canada'));
+----
+true
+
+# Intersection of two definitely disjoint geographies
+query I
+SELECT s2_intersection('POINT (-64 45)'::GEOGRAPHY, 'POINT (-64 46)'::GEOGRAPHY);
+----
+GEOMETRYCOLLECTION EMPTY
+
+# Intersection where rhs is EMPTY
+query I
+SELECT s2_intersection('POINT (-64 45)'::GEOGRAPHY, 'POINT EMPTY'::GEOGRAPHY).s2_format(6);
+----
+POINT (-64 45)
+
+# Intersection where lhs is EMPTY
+query I
+SELECT s2_intersection('POINT EMPTY'::GEOGRAPHY, 'POINT (-64 45)'::GEOGRAPHY).s2_format(6);
+----
+POINT (-64 45)
+
+# Intersection that must go through the S2BooleanOperation
+query I
+SELECT s2_intersection('POINT (-64 45)'::GEOGRAPHY, 'POINT (-64 45)'::GEOGRAPHY).s2_format(6);
+----
+POINT (-64 45)
+
+# Difference of two definitely disjoint geographies
+query I
+SELECT s2_difference('POINT (-64 45)'::GEOGRAPHY, 'POINT (-64 46)'::GEOGRAPHY).s2_format(6);
+----
+POINT (-64 45)
+
+# Difference where rhs is EMPTY
+query I
+SELECT s2_difference('POINT (-64 45)'::GEOGRAPHY, 'POINT EMPTY'::GEOGRAPHY).s2_format(6);
+----
+POINT (-64 45)
+
+# Difference where lhs is EMPTY
+query I
+SELECT s2_difference('POINT EMPTY'::GEOGRAPHY, 'POINT (-64 45)'::GEOGRAPHY);
+----
+GEOMETRYCOLLECTION EMPTY
+
+# Difference that must go through the S2BooleanOperation
+query I
+SELECT s2_difference('POINT (-64 45)'::GEOGRAPHY, 'POINT (-64 45)'::GEOGRAPHY).s2_format(6);
+----
+GEOMETRYCOLLECTION EMPTY
+
+# Union where rhs is EMPTY
+query I
+SELECT s2_union('POINT (-64 45)'::GEOGRAPHY, 'POINT EMPTY'::GEOGRAPHY).s2_format(6);
+----
+POINT (-64 45)
+
+# Union where lhs is EMPTY
+query I
+SELECT s2_union('POINT EMPTY'::GEOGRAPHY, 'POINT (-64 45)'::GEOGRAPHY).s2_format(6);
+----
+POINT (-64 45)
+
+# Union that must go through the S2BooleanOperation
+query I
+SELECT s2_union('POINT (-64 45)'::GEOGRAPHY, 'POINT (-64 46)'::GEOGRAPHY).s2_format(6);
+----
+MULTIPOINT ((-64 45), (-64 46))
