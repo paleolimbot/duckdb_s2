@@ -5,13 +5,69 @@
 # Require statement will ensure this test is run with this extension loaded
 require geography
 
+# Cell/center casts
 query I
-SELECT 'POINT (-64 45)'::GEOGRAPHY::S2_CELL_CENTER::VARCHAR;
+SELECT '2/112230310012123001312232330210'::S2_CELL_CENTER::S2_CELL;
 ----
 2/112230310012123001312232330210
 
 query I
-SELECT s2_cell_token('POINT (-64 45)'::GEOGRAPHY::S2_CELL_CENTER::S2_CELL);
+SELECT '2/112230310012123001312232330210'::S2_CELL::S2_CELL_CENTER;
+----
+2/112230310012123001312232330210
+
+query I
+SELECT 'POINT (-64 45)'::GEOGRAPHY::S2_CELL_CENTER;
+----
+2/112230310012123001312232330210
+
+# Geography casts
+query I
+SELECT ('2/112230310012123001312232330210'::S2_CELL_CENTER::GEOGRAPHY).s2_format(6);
+----
+POINT (-64 45)
+
+# Should this be NULL or error?
+query I
+SELECT 'not valid'::S2_CELL_CENTER::GEOGRAPHY;
+----
+POINT EMPTY
+
+query I
+SELECT 'POINT (-64 45)'::GEOGRAPHY::S2_CELL_CENTER;
+----
+2/112230310012123001312232330210
+
+# Should this be NULL or error?
+query I
+SELECT 'LINESTRING (-64 45, 0 0)'::GEOGRAPHY::S2_CELL_CENTER::VARCHAR;
+----
+Invalid: ffffffffffffffff
+
+# Special-cased WKB reader for cell center
+query I
+SELECT s2_aswkb('POINT (-64 45)'::GEOGRAPHY).s2_cellfromwkb()
+----
+2/112230310012123001312232330210
+
+query I
+SELECT s2_aswkb('MULTIPOINT (-64 45, 0 0)'::GEOGRAPHY).s2_cellfromwkb()
+----
+Invalid: ffffffffffffffff
+
+query I
+SELECT s2_aswkb('LINESTRING (-64 45, 0 0)'::GEOGRAPHY).s2_cellfromwkb()
+----
+Invalid: ffffffffffffffff
+
+query I
+SELECT ('2/1122303'::S2_CELL::GEOGRAPHY).s2_format(6);
+----
+POLYGON ((-63.470273 44.898834, -64.286611 45.098989, -64.779066 44.581998, -63.973842 44.388923, -63.470273 44.898834))
+
+# Cell token string representation
+query I
+SELECT s2_cell_token('2/112230310012123001312232330210'::S2_CELL);
 ----
 4b59a0cd83b5de49
 
@@ -19,3 +75,106 @@ query I
 SELECT s2_cell_from_token('4b59a0cd83b5de49');
 ----
 2/112230310012123001312232330210
+
+# Cell level
+# Should this be NULL or error?
+query I
+SELECT s2_cell_from_token('foofy')::VARCHAR;
+----
+Invalid: 0000000000000000
+
+# Cell ops
+query I
+SELECT s2_cell_level('2/112230310012123001312232330210'::S2_CELL);
+----
+30
+
+# Not sure if this should error or not (ffffffffffffffff can be used in indexes)
+query I
+SELECT s2_cell_level('not valid'::S2_CELL);
+----
+-1
+
+# Cell parent/child/neighbor
+query I
+SELECT ('2/112230310012123001312232330210'::S2_CELL).s2_cell_parent(0)
+----
+2/
+
+query I
+SELECT ('2/112230310012123001312232330210'::S2_CELL).s2_cell_parent(-30)
+----
+2/
+
+query I
+SELECT ('2/'::S2_CELL).s2_cell_parent(1);
+----
+Invalid: ffffffffffffffff
+
+query I
+SELECT ('2/'::S2_CELL).s2_cell_child(0);
+----
+2/0
+
+query I
+SELECT ('2/'::S2_CELL).s2_cell_child(-1);
+----
+Invalid: ffffffffffffffff
+
+query I
+SELECT ('2/'::S2_CELL).s2_cell_edge_neighbor(0);
+----
+1/
+
+query I
+SELECT ('2/'::S2_CELL).s2_cell_edge_neighbor(-1);
+----
+Invalid: ffffffffffffffff
+
+# Cell predicates
+query I
+SELECT s2_cell_contains('2/'::S2_CELL, '2/0'::S2_CELL);
+----
+true
+
+query I
+SELECT s2_cell_contains('2/0'::S2_CELL, '2/'::S2_CELL);
+----
+false
+
+query I
+SELECT s2_cell_contains('invalid'::S2_CELL, '2/'::S2_CELL);
+----
+false
+
+query I
+SELECT s2_cell_contains('2/'::S2_CELL, 'invalid'::S2_CELL);
+----
+false
+
+# xx
+
+query I
+SELECT s2_cell_intersects('2/'::S2_CELL, '2/0'::S2_CELL);
+----
+true
+
+query I
+SELECT s2_cell_intersects('2/0'::S2_CELL, '2/'::S2_CELL);
+----
+true
+
+query I
+SELECT s2_cell_intersects('2/'::S2_CELL, '3/'::S2_CELL);
+----
+false
+
+query I
+SELECT s2_cell_intersects('invalid'::S2_CELL, '2/'::S2_CELL);
+----
+false
+
+query I
+SELECT s2_cell_intersects('2/'::S2_CELL, 'invalid'::S2_CELL);
+----
+false

@@ -2,6 +2,7 @@
 #include "duckdb/main/database.hpp"
 #include "duckdb/main/extension_util.hpp"
 
+#include "s2/s2cell.h"
 #include "s2geography/op/cell.h"
 #include "s2geography/op/point.h"
 
@@ -201,6 +202,32 @@ struct S2CellCenterToGeography {
   }
 };
 
+struct S2CellToGeography {
+  static inline bool ExecuteCast(Vector& source, Vector& result, idx_t count,
+                                 CastParameters& parameters) {
+    Execute(source, result, count);
+    return true;
+  }
+
+  static inline void Execute(Vector& source, Vector& result, idx_t count) {
+    GeographyEncoder encoder;
+    std::vector<S2Point> loop;
+
+    UnaryExecutor::Execute<int64_t, string_t>(source, result, count, [&](int64_t arg0) {
+      S2CellId cell(arg0);
+      if (!cell.is_valid()) {
+        s2geography::PolygonGeography geog;
+        return StringVector::AddStringOrBlob(result, encoder.Encode(geog));
+      }
+
+      auto loop = make_uniq<S2Loop>(S2Cell(cell));
+      auto poly = make_uniq<S2Polygon>(std::move(loop));
+      s2geography::PolygonGeography geog(std::move(poly));
+      return StringVector::AddStringOrBlob(result, encoder.Encode(geog));
+    });
+  }
+};
+
 struct S2CellVertex {
   static void Register(DatabaseInstance& instance) {
     auto fn = ScalarFunction("s2_cell_vertex", {Types::S2_CELL(), LogicalType::TINYINT},
@@ -377,6 +404,10 @@ void RegisterS2CellOps(DatabaseInstance& instance) {
       instance, Types::GEOGRAPHY(), Types::S2_CELL_CENTER(),
       BoundCastInfo(S2CellCenterFromGeography::ExecuteCast), 1);
 
+  // s2_cell to geography can be implicit (never fails for valid input)
+  ExtensionUtil::RegisterCastFunction(instance, Types::S2_CELL(), Types::GEOGRAPHY(),
+                                      BoundCastInfo(S2CellToGeography::ExecuteCast), 0);
+
   // Explicit casts: s2_cell to/from s2_cell_center
   ExtensionUtil::RegisterCastFunction(instance, Types::S2_CELL_CENTER(), Types::S2_CELL(),
                                       BoundCastInfo(ExecuteNoopCast), 1);
@@ -387,14 +418,12 @@ void RegisterS2CellOps(DatabaseInstance& instance) {
   S2CellToString<ToToken>::Register(instance, "s2_cell_token");
   S2CellFromString<FromToken>::Register(instance, "s2_cell_from_token");
 
-  S2CellToDouble<Area>::Register(instance, "s2_cell_area");
-  S2CellToDouble<AreaApprox>::Register(instance, "s2_cell_area_approx");
   S2CellToInt8<Level>::Register(instance, "s2_cell_level", Types::S2_CELL());
 
   S2CellVertex::Register(instance);
 
   S2BinaryCellPredicate<Contains>::Register(instance, "s2_cell_contains");
-  S2BinaryCellPredicate<MayIntersect>::Register(instance, "s2_cell_may_intersect");
+  S2BinaryCellPredicate<MayIntersect>::Register(instance, "s2_cell_intersects");
   S2CellToCell<Child>::Register(instance, "s2_cell_child");
   S2CellToCell<Parent>::Register(instance, "s2_cell_parent");
   S2CellToCell<EdgeNeighbor>::Register(instance, "s2_cell_edge_neighbor");
