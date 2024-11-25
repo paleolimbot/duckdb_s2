@@ -55,6 +55,29 @@ SELECT 'LINESTRING (-64 45, 0 0)'::GEOGRAPHY::S2_CELL_CENTER::VARCHAR;
 ----
 Invalid: ffffffffffffffff
 
+query I
+SELECT ('2/0'::S2_CELL::S2_CELL_UNION::GEOGRAPHY).s2_format(6);
+----
+POLYGON ((45 35.26439, 90 45, 0 90, 0 45, 45 35.26439))
+
+# Cell union from storage gets sorted on the way in
+
+# (Except this cast, which isn't called even though it's regiestered)
+#query I
+#SELECT ['1/'::S2_CELL, '0/'::S2_CELL]::S2_CELL_UNION;
+#----
+#[0/, 1/]
+
+query I
+SELECT ['1/'::S2_CELL::UBIGINT, '0/'::S2_CELL::UBIGINT]::S2_CELL_UNION;
+----
+[0/, 1/]
+
+query I
+SELECT ['1/'::S2_CELL::BIGINT, '0/'::S2_CELL::BIGINT]::S2_CELL_UNION;
+----
+[0/, 1/]
+
 # Special-cased WKB reader for cell center
 query I
 SELECT s2_aswkb('POINT (-64 45)'::GEOGRAPHY).s2_cellfromwkb()

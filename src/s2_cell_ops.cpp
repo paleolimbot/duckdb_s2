@@ -3,6 +3,7 @@
 #include "duckdb/main/extension_util.hpp"
 
 #include "s2/s2cell.h"
+#include "s2/s2cell_union.h"
 #include "s2geography/op/cell.h"
 #include "s2geography/op/point.h"
 
@@ -78,6 +79,80 @@ struct S2CellUnionFromS2Cell {
             ListVector::PushBack(result, Value::UHUGEINT(cell_id));
             return list_entry_t{offset++, 1};
           }
+        });
+  }
+};
+
+// Normalize storage on the cast in to the type
+struct S2CellUnionFromStorage {
+  static inline bool ExecuteCast(Vector& source, Vector& result, idx_t count,
+                                 CastParameters& parameters) {
+    Execute(source, result, count);
+    return true;
+  }
+
+  static inline void Execute(Vector& source, Vector& result, idx_t count) {
+    ListVector::Reserve(result, count);
+    vector<S2CellId> cell_ids;
+    // Not sure if this is the appropriate way to handle list child data
+    // in the presence of a possible dictionary vector as a source
+    auto child_ids = reinterpret_cast<uint64_t*>(ListVector::GetEntry(source).GetData());
+
+    uint64_t offset = 0;
+
+    UnaryExecutor::Execute<list_entry_t, list_entry_t>(
+        source, result, count, [&](list_entry_t item) {
+          cell_ids.resize(static_cast<size_t>(item.length));
+          for (uint64_t i = 0; i < item.length; i++) {
+            cell_ids[i] = S2CellId(child_ids[item.offset + i]);
+            if (!cell_ids[i].is_valid()) {
+              throw InvalidInputException(
+                  std::string("Cell not valid <" + cell_ids[i].ToString() + ">"));
+            }
+          }
+
+          S2CellUnion::Normalize(&cell_ids);
+          for (const auto cell_id : cell_ids) {
+            ListVector::PushBack(result, Value::UHUGEINT(cell_id.id()));
+          }
+
+          list_entry_t out{offset, cell_ids.size()};
+          offset += out.length;
+          return out;
+        });
+  }
+};
+
+struct S2CellUnionToGeography {
+  static inline bool ExecuteCast(Vector& source, Vector& result, idx_t count,
+                                 CastParameters& parameters) {
+    Execute(source, result, count);
+    return true;
+  }
+
+  static inline void Execute(Vector& source, Vector& result, idx_t count) {
+    GeographyEncoder encoder;
+    vector<S2CellId> cell_ids;
+    // Not sure if this is the appropriate way to handle list child data
+    // in the presence of a possible dictionary vector as a source
+    auto child_ids = reinterpret_cast<uint64_t*>(ListVector::GetEntry(source).GetData());
+
+    UnaryExecutor::Execute<list_entry_t, string_t>(
+        source, result, count, [&](list_entry_t item) {
+          cell_ids.resize(static_cast<size_t>(item.length));
+          for (uint64_t i = 0; i < item.length; i++) {
+            cell_ids[i] = S2CellId(child_ids[item.offset + i]);
+          }
+
+          auto cells = S2CellUnion::FromNormalized(std::move(cell_ids));
+          auto poly = make_uniq<S2Polygon>();
+          poly->InitToCellUnionBorder(cells);
+          s2geography::PolygonGeography geog(std::move(poly));
+          cell_ids = cells.Release();
+
+          // Would be nice if we could set the covering here since we already
+          // know exactly what it is!
+          return StringVector::AddStringOrBlob(result, encoder.Encode(geog));
         });
   }
 };
@@ -235,7 +310,6 @@ struct S2CellToGeography {
 
   static inline void Execute(Vector& source, Vector& result, idx_t count) {
     GeographyEncoder encoder;
-    std::vector<S2Point> loop;
 
     UnaryExecutor::Execute<int64_t, string_t>(source, result, count, [&](int64_t arg0) {
       S2CellId cell(arg0);
@@ -432,10 +506,26 @@ void RegisterS2CellOps(DatabaseInstance& instance) {
   ExtensionUtil::RegisterCastFunction(instance, Types::S2_CELL(), Types::GEOGRAPHY(),
                                       BoundCastInfo(S2CellToGeography::ExecuteCast), 0);
 
+  // s2_cell_union to geography can be implicit
+  ExtensionUtil::RegisterCastFunction(
+      instance, Types::S2_CELL_UNION(), Types::GEOGRAPHY(),
+      BoundCastInfo(S2CellUnionToGeography::ExecuteCast), 0);
+
   // s2_cell to s2_cell_union can be implicit
   ExtensionUtil::RegisterCastFunction(instance, Types::S2_CELL(), Types::S2_CELL_UNION(),
                                       BoundCastInfo(S2CellUnionFromS2Cell::ExecuteCast),
                                       0);
+
+  // s2_cell union from storage is explicit
+  ExtensionUtil::RegisterCastFunction(
+      instance, LogicalType::LIST(Types::S2_CELL()), Types::S2_CELL_UNION(),
+      BoundCastInfo(S2CellUnionFromStorage::ExecuteCast), 1);
+  ExtensionUtil::RegisterCastFunction(
+      instance, LogicalType::LIST(LogicalType::UBIGINT), Types::S2_CELL_UNION(),
+      BoundCastInfo(S2CellUnionFromStorage::ExecuteCast), 1);
+  ExtensionUtil::RegisterCastFunction(
+      instance, LogicalType::LIST(LogicalType::BIGINT), Types::S2_CELL_UNION(),
+      BoundCastInfo(S2CellUnionFromStorage::ExecuteCast), 1);
 
   // Explicit casts: s2_cell to/from s2_cell_center
   ExtensionUtil::RegisterCastFunction(instance, Types::S2_CELL_CENTER(), Types::S2_CELL(),
