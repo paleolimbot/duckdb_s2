@@ -144,6 +144,58 @@ struct S2Length {
   }
 };
 
+struct S2XY {
+  static void Register(DatabaseInstance& instance) {
+    auto fn_x =
+        ScalarFunction("s2_x", {Types::GEOGRAPHY()}, LogicalType::DOUBLE, ExecuteFnX);
+    ExtensionUtil::RegisterFunction(instance, fn_x);
+
+    auto fn_y =
+        ScalarFunction("s2_y", {Types::GEOGRAPHY()}, LogicalType::DOUBLE, ExecuteFnY);
+    ExtensionUtil::RegisterFunction(instance, fn_y);
+  }
+
+  static inline void ExecuteFnX(DataChunk& args, ExpressionState& state, Vector& result) {
+    Execute(
+        args.data[0], result, args.size(), [](S2LatLng ll) { return ll.lng().degrees(); },
+        [](const s2geography::Geography& geog) { return s2_x(geog); });
+  }
+
+  static inline void ExecuteFnY(DataChunk& args, ExpressionState& state, Vector& result) {
+    Execute(
+        args.data[0], result, args.size(), [](S2LatLng ll) { return ll.lat().degrees(); },
+        [](const s2geography::Geography& geog) { return s2_y(geog); });
+  }
+
+  template <typename HandleLatLng, typename HandleGeog>
+  static void Execute(Vector& source, Vector& result, idx_t count,
+                      HandleLatLng&& handle_latlng, HandleGeog&& handle_geog) {
+    GeographyDecoder decoder;
+
+    UnaryExecutor::Execute<string_t, double>(
+        source, result, count, [&](string_t geog_str) {
+          decoder.DecodeTag(geog_str);
+
+          if (decoder.tag.flags & s2geography::EncodeTag::kFlagEmpty) {
+            return static_cast<double>(NAN);
+          }
+
+          switch (decoder.tag.kind) {
+            case s2geography::GeographyKind::CELL_CENTER: {
+              decoder.DecodeTagAndCovering(geog_str);
+              S2Point center = decoder.covering[0].ToPoint();
+              return handle_latlng(S2LatLng(center));
+            }
+
+            default: {
+              auto geog = decoder.Decode(geog_str);
+              return handle_geog(*geog);
+            }
+          }
+        });
+  }
+};
+
 }  // namespace
 
 void RegisterS2GeographyAccessors(DatabaseInstance& instance) {
@@ -151,6 +203,7 @@ void RegisterS2GeographyAccessors(DatabaseInstance& instance) {
   S2Area::Register(instance);
   S2Perimieter::Register(instance);
   S2Length::Register(instance);
+  S2XY::Register(instance);
 }
 
 }  // namespace duckdb_s2

@@ -277,3 +277,19 @@ query I
 SELECT s2_cell_intersects('2/'::S2_CELL, 'invalid'::S2_CELL);
 ----
 false
+
+# Sanity check of a few of these concept using the example data
+query I
+SELECT sum((s2_cellfromlonlat(s2_x(geog), s2_y(geog))::S2_CELL).s2_intersects(geog)::INTEGER) FROM s2_data_cities();
+----
+243
+
+query I
+SELECT sum((s2_arbitrarycellfromwkb(geog.s2_aswkb())::S2_CELL).s2_intersects(geog)::INTEGER) FROM s2_data_countries();
+----
+177
+
+query I
+SELECT sum((s2_cellfromwkb(geog.s2_aswkb())::S2_CELL).s2_intersects(geog)::INTEGER) FROM s2_data_cities();
+----
+243

@@ -140,6 +140,8 @@ Note that areas, lengths, and distances are currently spherical approximations
 - `s2_area(GEOGRAPHY)`
 - `s2_perimeter(GEOGRAPHY)`
 - `s2_length(GEOGRAPHY)`
+- `s2_x(GEOGRAPHY)`
+- `s2_y(GEOGRAPHY)`
 
 ### Input/output
 
@@ -176,7 +178,8 @@ to avoid a costly recomputation of the index for each element.
 
 ### Cell operators
 
-- `s2_cellfromwkb(BLOB)`
+- `s2_cellfromwkb(BLOB)`: import WKB directly to S2_CELL_CENTER
+- `s2_arbitrarycellfromwkb(BLOB)`: convert the first vertex to S2_CELL_CENTER for sorting
 - `s2_cellfromlonlat()`
 - `s2_cell_from_token(VARCHAR)`
 - `s2_cell_token(S2_CELL)`
