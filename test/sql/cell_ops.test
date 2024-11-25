@@ -49,11 +49,10 @@ SELECT 'POINT (-64 45)'::GEOGRAPHY::S2_CELL_CENTER;
 ----
 2/112230310012123001312232330210
 
-# Should this be NULL or error?
-query I
+statement error
 SELECT 'LINESTRING (-64 45, 0 0)'::GEOGRAPHY::S2_CELL_CENTER::VARCHAR;
 ----
-Invalid: ffffffffffffffff
+Invalid Input Error: Can't convert geography that is not empty nor a single point to S2_CELL_CENTER
 
 query I
 SELECT ('2/0'::S2_CELL::S2_CELL_UNION::GEOGRAPHY).s2_format(6);
@@ -83,6 +82,16 @@ query I
 SELECT s2_aswkb('POINT (-64 45)'::GEOGRAPHY).s2_cellfromwkb()
 ----
 2/112230310012123001312232330210
+
+query I
+SELECT s2_cellfromlonlat(-64, 45)
+----
+2/112230310012123001312232330210
+
+query I
+SELECT s2_cellfromlonlat('NaN', 'NaN')
+----
+Invalid: ffffffffffffffff
 
 query I
 SELECT s2_aswkb('MULTIPOINT (-64 45, 0 0)'::GEOGRAPHY).s2_cellfromwkb()
@@ -185,8 +194,6 @@ query I
 SELECT s2_cell_contains('2/'::S2_CELL, 'invalid'::S2_CELL);
 ----
 false
-
-# xx
 
 query I
 SELECT s2_cell_intersects('2/'::S2_CELL, '2/0'::S2_CELL);

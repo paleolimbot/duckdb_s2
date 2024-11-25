@@ -74,3 +74,119 @@ D SELECT
 
 The s2 extension is not currently a community extension (although could be in the future!). To use it, you'll have to grab a binary from the CI job on the main branch and load it after allowing
 unsigned extensions in your DuckDB session.
+
+```python
+
+```
+
+## Types
+
+The geography extension defines the following types:
+
+- `GEOGRAPHY`: A (multi)point, (multi)linestring, (multi)polygon, or an arbitrary
+  collection of those where coordinates are represented as geodedic longitude, latitude on
+  the WGS84 ellipsoid and edges are represented as geodesics approximated on the
+  sphere. This is exactly the same as the definition of coordinates and edges in
+  [BigQuery Geography](https://cloud.google.com/bigquery/docs/geospatial-data#coordinate_systems_and_edges).
+
+  The underlying representation of the `GEOGRAPHY` type is a `BLOB`. The exact
+  packing of bytes in this blob is not currently guaranteed but is intended to
+  be documented when stable such that other libraries can decode the value
+  independently.
+
+- `S2_CELL`: A cell in [S2's cell indexing system](http://s2geometry.io/devguide/s2cell_hierarchy).
+  Briefly, this is a way to encode every ~2cm square on earth with an unsigned 64-bit
+  integer. The indexing system is heiarchical with
+  [31 levels](http://s2geometry.io/resources/s2cell_statistics).
+
+- `S2_CELL_CENTER`: The center of an `S2_CELL`. This shares a physical representation
+  of the `S2_CELL` but has a different logical meaning (a point rather than a polygon).
+  This is a compact mechanism to encode a point (8 bytes) and can be more efficiently
+  compared for intersection and containment against an `S2_CELL` or `S2_CELL_UNION`.
+  For maximum efficiency, always store points as cell centers (they can be loaded
+  directly from WKB using `s2_cellfromwkb()` created from longitude and latitude
+  with `s2_cellfromlonlat()`, or casted from an existing `GEOGRAPHY`).
+
+- `S2_CELL_UNION`: A normalized list of `S2_CELL`s. This can be used to
+   approximate a polygon and is used internally as a rapid mechanism for
+   approximating the bounds of a `GEOGRAPHY` in a way that is more efficient
+   to compare for possible intersection. This covering can be generated
+   with `s2_covering()`.
+
+## Functions
+
+Currently implemented functions are listed below. Documentation is a work in progress!
+Note that all types listed above are implicitly castable to `GEOGRAPHY` such that
+you can use them with any function that accepts a `GEOGRAPHY`. In general, functions
+are intended to have the same behaviour as the equivalent `ST_xx()` function
+(if it exists).
+
+Documentation is a work in progress! If you need a function that is missing, open
+an issue (most functions have already been ported to the underlying C++ library
+and just aren't wired up to DuckDB yet).
+
+### Test data
+
+You can use the table functions `s2_data_cities()` and `s2_data_countries()` to
+load tables useful for testing. You can also use `s2_data_city('<city name>')` and
+`s2_data_country('<country name>')` to get a scalar `GEOGRAPHY`.
+
+### Geography accessors
+
+Note that areas, lengths, and distances are currently spherical approximations
+(i.e., do not take into account the WGS84 ellipsoid).
+
+- `s2_isempty(GEOGRAPHY)`
+- `s2_area(GEOGRAPHY)`
+- `s2_perimeter(GEOGRAPHY)`
+- `s2_length(GEOGRAPHY)`
+
+### Input/output
+
+- `s2_geogfromwkb(BLOB)`
+- `s2_aswkb(GEOGRAPHY)`
+- `CAST(VARCHAR AS GEOGRAPHY)` (e.g., `'POINT (-64 45)::GEOGRAPHY`).
+- `CAST(GEOGRAPHY AS VARCHAR)` (e.g., `'POINT (-64 45)::GEOGRAPHY::VARCHAR`).
+- `s2_format(GEOGRAPHY, INTEGER)` (WKT export with trimmed precision)
+- `s2_prepare(GEOGRAPHY)`: Builds an internal index representationthat can
+  be efficiently reused for multiple comparisons.
+
+### Geography predicates
+
+Note that predicate operations need to build an edge index for each
+geography for every comparison. If you suspect you will need to perform
+many comparisons against a single geography (e.g., point in polygon in
+a join), you can use `CREATE TABLE ... AS SELECT s2_prepare(geog) FROM ...`
+to avoid a costly recomputation of the index for each element.
+
+- `s2_mayintersect(GEOGRAPHY, GEOGRAPHY)`
+- `s2_intersects(GEOGRAPHY, GEOGRAPHY)`
+- `s2_contains(GEOGRAPHY, GEOGRAPHY)`
+- `s2_equals(GEOGRAPHY, GEOGRAPHY)`
+
+### Overlay operations
+
+- `s2_intersects(GEOGRAPHY, GEOGRAPHY)`
+- `s2_difference(GEOGRAPHY, GEOGRAPHY)`
+- `s2_union(GEOGRAPHY, GEOGRAPHY)`
+
+### Bounds
+
+- `s2_covering(GEOGRAPHY)`
+
+### Cell operators
+
+- `s2_cellfromwkb(BLOB)`
+- `s2_cellfromlonlat()`
+- `s2_cell_from_token(VARCHAR)`
+- `s2_cell_token(S2_CELL)`
+- `s2_cell_level(S2_CELL)`
+- `s2_cell_parent(S2_CELL, INTEGER)`
+- `s2_cell_child(S2_CELL, INTEGER)`
+- `s2_cell_edge_neighbor(S2_CELL, INTEGER)`
+- `s2_cell_contains(S2_CELL, S2_CELL)`
+- `s2_cell_intersects(S2_CELL, S2_CELL)`
+
+### Version information
+
+- `s2_dependencies()`

@@ -17,10 +17,10 @@ namespace duckdb_s2 {
 
 namespace {
 
-struct S2CoveringCellIds {
+struct S2Covering {
   static void Register(DatabaseInstance& instance) {
-    auto fn = ScalarFunction("s2_covering_cell_ids", {Types::GEOGRAPHY()},
-                             Types::S2_CELL_UNION(), ExecuteFn);
+    auto fn = ScalarFunction("s2_covering", {Types::GEOGRAPHY()}, Types::S2_CELL_UNION(),
+                             ExecuteFn);
     ExtensionUtil::RegisterFunction(instance, fn);
   }
 
@@ -73,7 +73,7 @@ struct S2CoveringCellIds {
 }  // namespace
 
 void RegisterS2GeographyBounds(DatabaseInstance& instance) {
-  S2CoveringCellIds::Register(instance);
+  S2Covering::Register(instance);
 }
 
 }  // namespace duckdb_s2

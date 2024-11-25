@@ -30,6 +30,11 @@ struct S2CellCenterFromGeography {
         source, result, count, [&](string_t geog_str) {
           decoder.DecodeTag(geog_str);
 
+          // Empties are always translated as invalid regardless of type
+          if (decoder.tag.flags & s2geography::EncodeTag::kFlagEmpty) {
+            return static_cast<int64_t>(S2CellId::Sentinel().id());
+          }
+
           // If we already have a snapped cell center encoding, the last 8 inlined
           // bytes are the little endian cell id as a uint64_t
           if (decoder.tag.kind == s2geography::GeographyKind::CELL_CENTER &&
@@ -50,7 +55,9 @@ struct S2CellCenterFromGeography {
 
           std::unique_ptr<S2Shape> shape = geog->Shape(0);
           if (shape->num_edges() != 1 || shape->dimension() != 0) {
-            return static_cast<int64_t>(S2CellId::Sentinel().id());
+            throw InvalidInputException(
+                std::string("Can't convert geography that is not empty nor a single "
+                            "point to S2_CELL_CENTER"));
           }
 
           S2CellId cell(shape->edge(0).v0);
@@ -260,6 +267,33 @@ struct S2CellCenterFromWKB {
   static constexpr uint32_t min_valid_size = sizeof(uint8_t) + sizeof(uint32_t);
   static constexpr int64_t invalid_id =
       static_cast<int64_t>(s2geography::op::cell::kCellIdSentinel);
+};
+
+struct S2CellCenterFromLonLat {
+  static void Register(DatabaseInstance& instance) {
+    auto fn =
+        ScalarFunction("s2_cellfromlonlat", {LogicalType::DOUBLE, LogicalType::DOUBLE},
+                       Types::S2_CELL_CENTER(), ExecuteFn);
+    ExtensionUtil::RegisterFunction(instance, fn);
+  }
+
+  static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
+    return Execute(args.data[0], args.data[1], result, args.size());
+  }
+
+  static inline void Execute(Vector& src_lon, Vector& src_lat, Vector& result,
+                             idx_t count) {
+    BinaryExecutor::Execute<double, double, int64_t>(
+        src_lon, src_lat, result, count, [&](double lon, double lat) {
+          if (std::isnan(lon) && std::isnan(lat)) {
+            return static_cast<int64_t>(S2CellCenterFromWKB::invalid_id);
+          }
+
+          auto latlng = S2LatLng::FromDegrees(lat, lon);
+          S2CellId cell_id(latlng.ToPoint());
+          return static_cast<int64_t>(cell_id.id());
+        });
+  }
 };
 
 struct S2CellCenterToGeography {
@@ -534,6 +568,7 @@ void RegisterS2CellOps(DatabaseInstance& instance) {
                                       BoundCastInfo(ExecuteNoopCast), 1);
 
   S2CellCenterFromWKB::Register(instance);
+  S2CellCenterFromLonLat::Register(instance);
   S2CellToString<ToToken>::Register(instance, "s2_cell_token");
   S2CellFromString<FromToken>::Register(instance, "s2_cell_from_token");
 
