@@ -76,7 +76,7 @@ struct S2CellUnionFromS2Cell {
           if (!cell.is_valid()) {
             return list_entry_t{0, 0};
           } else {
-            ListVector::PushBack(result, Value::UHUGEINT(cell_id));
+            ListVector::PushBack(result, Value::UBIGINT(cell_id));
             return list_entry_t{offset++, 1};
           }
         });
@@ -113,7 +113,7 @@ struct S2CellUnionFromStorage {
 
           S2CellUnion::Normalize(&cell_ids);
           for (const auto cell_id : cell_ids) {
-            ListVector::PushBack(result, Value::UHUGEINT(cell_id.id()));
+            ListVector::PushBack(result, Value::UBIGINT(cell_id.id()));
           }
 
           list_entry_t out{offset, cell_ids.size()};
