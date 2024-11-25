@@ -165,108 +165,233 @@ struct S2CellUnionToGeography {
 };
 
 // Experimental version of a WKB parser that only handles points (or multipoints
-// with a single point). If the s2geography WKB parser were faster this probably
-// wouldn't be needed.
+// with a single point). Also, includes an implementation of the s2ified
+// GEOSHilbertCode_r() (which helpfully does not require a previously calculated extent).
 struct S2CellCenterFromWKB {
   static void Register(DatabaseInstance& instance) {
     auto fn = ScalarFunction("s2_cellfromwkb", {LogicalType::BLOB},
-                             Types::S2_CELL_CENTER(), ExecuteFn);
+                             Types::S2_CELL_CENTER(), ExecutePointFn);
     ExtensionUtil::RegisterFunction(instance, fn);
+
+    auto fn_arbitrary = ScalarFunction("s2_arbitrarycellfromwkb", {LogicalType::BLOB},
+                                       Types::S2_CELL_CENTER(), ExecuteArbitraryFn);
+    ExtensionUtil::RegisterFunction(instance, fn_arbitrary);
   }
 
-  static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
-    return Execute(args.data[0], result, args.size());
+  static inline void ExecutePointFn(DataChunk& args, ExpressionState& state,
+                                    Vector& result) {
+    return ExecutePoint(args.data[0], result, args.size());
   }
 
-  static inline void Execute(Vector& source, Vector& result, idx_t count) {
-    uint32_t geometry_type;
-    double lnglat[2];
+  static inline void ExecuteArbitraryFn(DataChunk& args, ExpressionState& state,
+                                        Vector& result) {
+    return ExecuteArbitrary(args.data[0], result, args.size());
+  }
 
+  // Here the goal is to parse POINT (x x) or MULTIPOINT ((x x)) into a cell id
+  // and error for anything else. EMPTY input goes to Sentinel().
+  static inline void ExecutePoint(Vector& source, Vector& result, idx_t count) {
     UnaryExecutor::Execute<string_t, int64_t>(source, result, count, [&](string_t wkb) {
-      if (wkb.GetSize() < min_valid_size) {
-        return invalid_id;
-      }
-
       Decoder decoder(wkb.GetData(), wkb.GetSize());
-      if (decoder.avail() < min_valid_size) {
-        return invalid_id;
+      S2CellId cell_id = S2CellId::Sentinel();
+      VisitGeometry(
+          &decoder,
+          [&cell_id](uint32_t geometry_type, S2LatLng pt) {
+            // If this point didn't come from a point, we need to error
+            if ((geometry_type % 1000) != 1) {
+              throw InvalidInputException(
+                  "Can't parse WKB with non-point input to S2_CELL_CENTER");
+            }
+
+            // If we've already seen a point, we also need to error
+            if (cell_id != S2CellId::Sentinel()) {
+              throw InvalidInputException(
+                  "Can't parse WKB with more than one point to S2_CELL_CENTER");
+            }
+
+            cell_id = S2CellId(pt.ToPoint());
+            return true;
+          },
+          [](void) { throw InvalidInputException("Invalid WKB"); });
+
+      return static_cast<int64_t>(cell_id.id());
+    });
+  }
+
+  // Here the goal is just to get any arbitrary cell from the first lon/lat value we
+  // find. This does have to assume that the WKB is lon/lat. Great for sorting!
+  // Would be much improved if we could also reproject the first xy value we find
+  // so that nobody has to parse WKB just to do a vague spatial sort.
+  static inline void ExecuteArbitrary(Vector& source, Vector& result, idx_t count) {
+    UnaryExecutor::Execute<string_t, int64_t>(source, result, count, [&](string_t wkb) {
+      Decoder decoder(wkb.GetData(), wkb.GetSize());
+      S2CellId cell_id = S2CellId::Sentinel();
+      VisitGeometry(
+          &decoder,
+          [&cell_id](uint32_t geometry_type, S2LatLng pt) {
+            // We don't care about geometry type here either, but we do want
+            // to stop after the first point has been reached.
+            cell_id = S2CellId(pt.ToPoint());
+            return false;
+          },
+          // We don't care about invalid input here
+          [](void) {});
+
+      return static_cast<int64_t>(cell_id.id());
+    });
+  }
+
+  template <typename LatLngCallback, typename ErrorCallback>
+  static bool VisitGeometry(Decoder* decoder, LatLngCallback on_point,
+                            ErrorCallback on_error) {
+    if (decoder->avail() < sizeof(uint8_t)) {
+      on_error();
+      return false;
+    }
+    uint8_t le = decoder->get8();
+
+    if (decoder->avail() < sizeof(uint32_t)) {
+      on_error();
+      return false;
+    }
+
+    uint32_t geometry_type;
+    if (le) {
+      geometry_type = LittleEndian::Load32(decoder->skip(sizeof(uint32_t)));
+    } else {
+      geometry_type = BigEndian::Load32(decoder->skip(sizeof(uint32_t)));
+    }
+
+    if (geometry_type & ewkb_srid_bit) {
+      if (decoder->avail() < sizeof(uint32_t)) {
+        on_error();
+        return false;
       }
 
-      uint8_t little_endian = decoder.get8();
-      do {
-        if (decoder.avail() < sizeof(uint32_t)) {
-          return invalid_id;
-        }
+      decoder->skip(sizeof(uint32_t));
+    }
 
-        if (little_endian) {
-          geometry_type = LittleEndian::Load32(decoder.skip(sizeof(uint32_t)));
-        } else {
-          geometry_type = BigEndian::Load32(decoder.skip(sizeof(uint32_t)));
-        }
+    geometry_type &= ~(ewkb_srid_bit | ewkb_zm_bits);
+    switch (geometry_type % 1000) {
+      case 1:
+        return VisitPoint(decoder, le, geometry_type, on_point, on_error);
+      case 2:
+        return VisitSequence(decoder, le, geometry_type, on_point, on_error);
+      case 3:
+        return VisitPolygon(decoder, le, geometry_type, on_point, on_error);
+      case 4:
+      case 5:
+      case 6:
+      case 7:
+        return VisitCollection(decoder, le, on_point, on_error);
+      default:
+        on_error();
+        return false;
+    }
+  }
 
-        if (geometry_type & ewkb_srid_bit) {
-          if (decoder.avail() < sizeof(uint32_t)) {
-            return invalid_id;
-          }
+  template <typename LatLngCallback, typename ErrorCallback>
+  static bool VisitCollection(Decoder* decoder, bool le, LatLngCallback on_point,
+                              ErrorCallback on_error) {
+    if (decoder->avail() < sizeof(uint32_t)) {
+      on_error();
+      return false;
+    }
 
-          decoder.skip(sizeof(uint32_t));
-        }
+    uint32_t n;
+    if (le) {
+      n = LittleEndian::Load32(decoder->skip(sizeof(uint32_t)));
+    } else {
+      n = BigEndian::Load32(decoder->skip(sizeof(uint32_t)));
+    }
 
-        geometry_type &= ~(ewkb_srid_bit | ewkb_zm_bits);
-        switch (geometry_type % 1000) {
-          case 1: {
-            if (decoder.avail() < (2 * sizeof(double))) {
-              return invalid_id;
-            }
+    for (uint32_t i = 0; i < n; i++) {
+      bool keep_going = VisitGeometry(decoder, on_point, on_error);
+      if (!keep_going) {
+        return false;
+      }
+    }
 
-            if (little_endian) {
-              lnglat[0] = LittleEndian::Load<double>(decoder.skip(sizeof(double)));
-              lnglat[1] = LittleEndian::Load<double>(decoder.skip(sizeof(double)));
-            } else {
-              lnglat[0] = BigEndian::Load<double>(decoder.skip(sizeof(double)));
-              lnglat[1] = BigEndian::Load<double>(decoder.skip(sizeof(double)));
-            }
+    return true;
+  }
 
-            S2Point pt =
-                S2LatLng::FromDegrees(lnglat[1], lnglat[0]).Normalized().ToPoint();
-            return static_cast<int64_t>(S2CellId(pt).id());
-          }
+  template <typename LatLngCallback, typename ErrorCallback>
+  static bool VisitPolygon(Decoder* decoder, bool le, uint32_t geometry_type,
+                           LatLngCallback on_point, ErrorCallback on_error) {
+    if (decoder->avail() < sizeof(uint32_t)) {
+      on_error();
+      return false;
+    }
 
-          case 4: {
-            // MULTIPOINT type
-            uint32_t num_points;
-            if (decoder.avail() < (sizeof(uint32_t) + sizeof(uint8_t))) {
-              return invalid_id;
-            }
+    uint32_t n;
+    if (le) {
+      n = LittleEndian::Load32(decoder->skip(sizeof(uint32_t)));
+    } else {
+      n = BigEndian::Load32(decoder->skip(sizeof(uint32_t)));
+    }
 
-            if (little_endian) {
-              num_points = LittleEndian::Load32(decoder.skip(sizeof(uint32_t)));
-            } else {
-              num_points = BigEndian::Load32(decoder.skip(sizeof(uint32_t)));
-            }
+    for (uint32_t i = 0; i < n; i++) {
+      bool keep_going = VisitSequence(decoder, le, geometry_type, on_point, on_error);
+      if (!keep_going) {
+        return false;
+      }
+    }
 
-            if (num_points != 1) {
-              return invalid_id;
-            }
+    return true;
+  }
 
-            little_endian = decoder.get8();
-            break;
-          }
+  template <typename LatLngCallback, typename ErrorCallback>
+  static bool VisitSequence(Decoder* decoder, bool le, uint32_t geometry_type,
+                            LatLngCallback on_point, ErrorCallback on_error) {
+    if (decoder->avail() < sizeof(uint32_t)) {
+      on_error();
+      return false;
+    }
 
-          default:
-            return invalid_id;
-        }
-      } while (decoder.avail() > 0);
+    uint32_t n;
+    if (le) {
+      n = LittleEndian::Load32(decoder->skip(sizeof(uint32_t)));
+    } else {
+      n = BigEndian::Load32(decoder->skip(sizeof(uint32_t)));
+    }
 
-      return invalid_id;
-    });
+    for (uint32_t i = 0; i < n; i++) {
+      bool keep_going = VisitPoint(decoder, le, geometry_type, on_point, on_error);
+      if (!keep_going) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  template <typename LatLngCallback, typename ErrorCallback>
+  static bool VisitPoint(Decoder* decoder, bool le, uint32_t geometry_type,
+                         LatLngCallback on_point, ErrorCallback on_error) {
+    if (decoder->avail() < (2 * sizeof(double))) {
+      on_error();
+      return false;
+    }
+
+    double lnglat[2];
+    if (le) {
+      lnglat[0] = LittleEndian::Load<double>(decoder->skip(sizeof(double)));
+      lnglat[1] = LittleEndian::Load<double>(decoder->skip(sizeof(double)));
+    } else {
+      lnglat[0] = BigEndian::Load<double>(decoder->skip(sizeof(double)));
+      lnglat[1] = BigEndian::Load<double>(decoder->skip(sizeof(double)));
+    }
+
+    if (std::isnan(lnglat[0]) || std::isnan(lnglat[1])) {
+      return true;
+    }
+
+    auto latlng = S2LatLng::FromDegrees(lnglat[1], lnglat[0]);
+    return on_point(geometry_type, latlng);
   }
 
   static constexpr uint32_t ewkb_srid_bit = 0x20000000;
   static constexpr uint32_t ewkb_zm_bits = 0x40000000 | 0x80000000;
-  static constexpr uint32_t min_valid_size = sizeof(uint8_t) + sizeof(uint32_t);
-  static constexpr int64_t invalid_id =
-      static_cast<int64_t>(s2geography::op::cell::kCellIdSentinel);
 };
 
 struct S2CellCenterFromLonLat {
@@ -286,7 +411,7 @@ struct S2CellCenterFromLonLat {
     BinaryExecutor::Execute<double, double, int64_t>(
         src_lon, src_lat, result, count, [&](double lon, double lat) {
           if (std::isnan(lon) && std::isnan(lat)) {
-            return static_cast<int64_t>(S2CellCenterFromWKB::invalid_id);
+            return static_cast<int64_t>(S2CellId::Sentinel().id());
           }
 
           auto latlng = S2LatLng::FromDegrees(lat, lon);

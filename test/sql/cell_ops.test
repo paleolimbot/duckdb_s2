@@ -77,12 +77,8 @@ SELECT ['1/'::S2_CELL::BIGINT, '0/'::S2_CELL::BIGINT]::S2_CELL_UNION;
 ----
 [0/, 1/]
 
-# Special-cased WKB reader for cell center
-query I
-SELECT s2_aswkb('POINT (-64 45)'::GEOGRAPHY).s2_cellfromwkb()
-----
-2/112230310012123001312232330210
 
+# cell from lon/lat
 query I
 SELECT s2_cellfromlonlat(-64, 45)
 ----
@@ -93,16 +89,78 @@ SELECT s2_cellfromlonlat('NaN', 'NaN')
 ----
 Invalid: ffffffffffffffff
 
+# Special-cased WKB reader for cell center (should work for anything
+# with exactly one valid point)
 query I
+SELECT s2_aswkb('POINT (-64 45)'::GEOGRAPHY).s2_cellfromwkb()
+----
+2/112230310012123001312232330210
+
+query I
+SELECT s2_aswkb('GEOMETRYCOLLECTION(POINT (-64 45))'::GEOGRAPHY).s2_cellfromwkb()
+----
+2/112230310012123001312232330210
+
+query I
+SELECT s2_aswkb('GEOMETRYCOLLECTION(POLYGON EMPTY, POINT (-64 45))'::GEOGRAPHY).s2_cellfromwkb()
+----
+2/112230310012123001312232330210
+
+# Also should work for empty things
+query I
+SELECT s2_aswkb('POINT EMPTY'::GEOGRAPHY).s2_cellfromwkb()
+----
+Invalid: ffffffffffffffff
+
+query I
+SELECT s2_aswkb('LINESTRING EMPTY'::GEOGRAPHY).s2_cellfromwkb()
+----
+Invalid: ffffffffffffffff
+
+query I
+SELECT s2_aswkb('POLYGON EMPTY'::GEOGRAPHY).s2_cellfromwkb()
+----
+Invalid: ffffffffffffffff
+
+query I
+SELECT s2_aswkb('GEOMETRYCOLLECTION (POINT EMPTY, LINESTRING EMPTY, POLYGON EMPTY)'::GEOGRAPHY).s2_cellfromwkb()
+----
+Invalid: ffffffffffffffff
+
+# ..but error for non-things that aren't exactly one point
+statement error
 SELECT s2_aswkb('MULTIPOINT (-64 45, 0 0)'::GEOGRAPHY).s2_cellfromwkb()
 ----
-Invalid: ffffffffffffffff
+Invalid Input Error: Can't parse WKB with more than one point to S2_CELL_CENTER
+
+statement error
+SELECT s2_aswkb('LINESTRING (-64 45, 0 0)'::GEOGRAPHY).s2_cellfromwkb()
+----
+Invalid Input Error: Can't parse WKB with non-point input to S2_CELL_CENTER
+
+# Getting an arbitrary cell from WKB input should work for any type but
+# never parse past the first point
+query I
+SELECT s2_aswkb('LINESTRING (-64 45, 0 0)'::GEOGRAPHY).s2_arbitrarycellfromwkb()
+----
+2/112230310012123001312232330210
 
 query I
-SELECT s2_aswkb('LINESTRING (-64 45, 0 0)'::GEOGRAPHY).s2_cellfromwkb()
+SELECT s2_aswkb('POLYGON ((-64 45, 0 0, 0 1, 0 2))'::GEOGRAPHY).s2_arbitrarycellfromwkb()
+----
+2/112230310012123001312232330210
+
+query I
+SELECT s2_aswkb('GEOMETRYCOLLECTION(POLYGON EMPTY, LINESTRING (-64 45, 0 0))'::GEOGRAPHY).s2_arbitrarycellfromwkb()
+----
+2/112230310012123001312232330210
+
+query I
+SELECT s2_aswkb('GEOMETRYCOLLECTION (POINT EMPTY, LINESTRING EMPTY, POLYGON EMPTY)'::GEOGRAPHY).s2_arbitrarycellfromwkb()
 ----
 Invalid: ffffffffffffffff
 
+# Cast cell to geography
 query I
 SELECT ('2/1122303'::S2_CELL::GEOGRAPHY).s2_format(6);
 ----
