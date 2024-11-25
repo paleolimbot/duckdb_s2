@@ -2,6 +2,8 @@
 #include "duckdb/main/database.hpp"
 #include "duckdb/main/extension_util.hpp"
 
+#include "s2/s2cell.h"
+#include "s2/s2cell_union.h"
 #include "s2geography/op/cell.h"
 #include "s2geography/op/point.h"
 
@@ -14,7 +16,7 @@ namespace duckdb_s2 {
 
 namespace {
 
-struct S2CellFromGeography {
+struct S2CellCenterFromGeography {
   static inline bool ExecuteCast(Vector& source, Vector& result, idx_t count,
                                  CastParameters& parameters) {
     Execute(source, result, count);
@@ -57,13 +59,111 @@ struct S2CellFromGeography {
   }
 };
 
+struct S2CellUnionFromS2Cell {
+  static inline bool ExecuteCast(Vector& source, Vector& result, idx_t count,
+                                 CastParameters& parameters) {
+    Execute(source, result, count);
+    return true;
+  }
+
+  static inline void Execute(Vector& source, Vector& result, idx_t count) {
+    ListVector::Reserve(result, count);
+    uint64_t offset = 0;
+
+    UnaryExecutor::Execute<int64_t, list_entry_t>(
+        source, result, count, [&](int64_t cell_id) {
+          S2CellId cell(cell_id);
+          if (!cell.is_valid()) {
+            return list_entry_t{0, 0};
+          } else {
+            ListVector::PushBack(result, Value::UBIGINT(cell_id));
+            return list_entry_t{offset++, 1};
+          }
+        });
+  }
+};
+
+// Normalize storage on the cast in to the type
+struct S2CellUnionFromStorage {
+  static inline bool ExecuteCast(Vector& source, Vector& result, idx_t count,
+                                 CastParameters& parameters) {
+    Execute(source, result, count);
+    return true;
+  }
+
+  static inline void Execute(Vector& source, Vector& result, idx_t count) {
+    ListVector::Reserve(result, count);
+    vector<S2CellId> cell_ids;
+    // Not sure if this is the appropriate way to handle list child data
+    // in the presence of a possible dictionary vector as a source
+    auto child_ids = reinterpret_cast<uint64_t*>(ListVector::GetEntry(source).GetData());
+
+    uint64_t offset = 0;
+
+    UnaryExecutor::Execute<list_entry_t, list_entry_t>(
+        source, result, count, [&](list_entry_t item) {
+          cell_ids.resize(static_cast<size_t>(item.length));
+          for (uint64_t i = 0; i < item.length; i++) {
+            cell_ids[i] = S2CellId(child_ids[item.offset + i]);
+            if (!cell_ids[i].is_valid()) {
+              throw InvalidInputException(
+                  std::string("Cell not valid <" + cell_ids[i].ToString() + ">"));
+            }
+          }
+
+          S2CellUnion::Normalize(&cell_ids);
+          for (const auto cell_id : cell_ids) {
+            ListVector::PushBack(result, Value::UBIGINT(cell_id.id()));
+          }
+
+          list_entry_t out{offset, cell_ids.size()};
+          offset += out.length;
+          return out;
+        });
+  }
+};
+
+struct S2CellUnionToGeography {
+  static inline bool ExecuteCast(Vector& source, Vector& result, idx_t count,
+                                 CastParameters& parameters) {
+    Execute(source, result, count);
+    return true;
+  }
+
+  static inline void Execute(Vector& source, Vector& result, idx_t count) {
+    GeographyEncoder encoder;
+    vector<S2CellId> cell_ids;
+    // Not sure if this is the appropriate way to handle list child data
+    // in the presence of a possible dictionary vector as a source
+    auto child_ids = reinterpret_cast<uint64_t*>(ListVector::GetEntry(source).GetData());
+
+    UnaryExecutor::Execute<list_entry_t, string_t>(
+        source, result, count, [&](list_entry_t item) {
+          cell_ids.resize(static_cast<size_t>(item.length));
+          for (uint64_t i = 0; i < item.length; i++) {
+            cell_ids[i] = S2CellId(child_ids[item.offset + i]);
+          }
+
+          auto cells = S2CellUnion::FromNormalized(std::move(cell_ids));
+          auto poly = make_uniq<S2Polygon>();
+          poly->InitToCellUnionBorder(cells);
+          s2geography::PolygonGeography geog(std::move(poly));
+          cell_ids = cells.Release();
+
+          // Would be nice if we could set the covering here since we already
+          // know exactly what it is!
+          return StringVector::AddStringOrBlob(result, encoder.Encode(geog));
+        });
+  }
+};
+
 // Experimental version of a WKB parser that only handles points (or multipoints
 // with a single point). If the s2geography WKB parser were faster this probably
 // wouldn't be needed.
-struct S2CellFromWKB {
+struct S2CellCenterFromWKB {
   static void Register(DatabaseInstance& instance) {
-    auto fn = ScalarFunction("s2_cellfromwkb", {LogicalType::BLOB}, Types::S2_CELL(),
-                             ExecuteFn);
+    auto fn = ScalarFunction("s2_cellfromwkb", {LogicalType::BLOB},
+                             Types::S2_CELL_CENTER(), ExecuteFn);
     ExtensionUtil::RegisterFunction(instance, fn);
   }
 
@@ -162,7 +262,7 @@ struct S2CellFromWKB {
       static_cast<int64_t>(s2geography::op::cell::kCellIdSentinel);
 };
 
-struct S2CellToGeography {
+struct S2CellCenterToGeography {
   static inline bool ExecuteCast(Vector& source, Vector& result, idx_t count,
                                  CastParameters& parameters) {
     Execute(source, result, count);
@@ -197,6 +297,31 @@ struct S2CellToGeography {
       } else {
         return empty_str;
       }
+    });
+  }
+};
+
+struct S2CellToGeography {
+  static inline bool ExecuteCast(Vector& source, Vector& result, idx_t count,
+                                 CastParameters& parameters) {
+    Execute(source, result, count);
+    return true;
+  }
+
+  static inline void Execute(Vector& source, Vector& result, idx_t count) {
+    GeographyEncoder encoder;
+
+    UnaryExecutor::Execute<int64_t, string_t>(source, result, count, [&](int64_t arg0) {
+      S2CellId cell(arg0);
+      if (!cell.is_valid()) {
+        s2geography::PolygonGeography geog;
+        return StringVector::AddStringOrBlob(result, encoder.Encode(geog));
+      }
+
+      auto loop = make_uniq<S2Loop>(S2Cell(cell));
+      auto poly = make_uniq<S2Polygon>(std::move(loop));
+      s2geography::PolygonGeography geog(std::move(poly));
+      return StringVector::AddStringOrBlob(result, encoder.Encode(geog));
     });
   }
 };
@@ -293,8 +418,9 @@ struct S2CellToDouble {
 
 template <typename Op>
 struct S2CellToInt8 {
-  static void Register(DatabaseInstance& instance, const char* name) {
-    auto fn = ScalarFunction(name, {Types::S2_CELL()}, LogicalType::TINYINT, Execute);
+  static void Register(DatabaseInstance& instance, const char* name,
+                       LogicalType arg_type) {
+    auto fn = ScalarFunction(name, {arg_type}, LogicalType::TINYINT, Execute);
     ExtensionUtil::RegisterFunction(instance, fn);
   }
 
@@ -339,37 +465,84 @@ struct S2CellToCell {
   }
 };
 
+bool ExecuteNoopCast(Vector& source, Vector& result, idx_t count,
+                     CastParameters& parameters) {
+  result.Reinterpret(source);
+  return true;
+}
+
 }  // namespace
 
 void RegisterS2CellOps(DatabaseInstance& instance) {
   using namespace s2geography::op::cell;
 
   // Explicit casts to/from string handle the debug string (better for printing)
+  // We use the same character representation for both cells and centers.
   ExtensionUtil::RegisterCastFunction(
       instance, Types::S2_CELL(), LogicalType::VARCHAR,
       BoundCastInfo(S2CellToString<ToDebugString>::ExecuteCast), 1);
   ExtensionUtil::RegisterCastFunction(
       instance, LogicalType::VARCHAR, Types::S2_CELL(),
       BoundCastInfo(S2CellFromString<FromDebugString>::ExecuteCast), 1);
+  ExtensionUtil::RegisterCastFunction(
+      instance, Types::S2_CELL_CENTER(), LogicalType::VARCHAR,
+      BoundCastInfo(S2CellToString<ToDebugString>::ExecuteCast), 1);
+  ExtensionUtil::RegisterCastFunction(
+      instance, LogicalType::VARCHAR, Types::S2_CELL_CENTER(),
+      BoundCastInfo(S2CellFromString<FromDebugString>::ExecuteCast), 1);
 
-  // Explicit casts to/from geography
+  // s2_cell_center to geography can be implicit (never fails for valid input)
+  ExtensionUtil::RegisterCastFunction(
+      instance, Types::S2_CELL_CENTER(), Types::GEOGRAPHY(),
+      BoundCastInfo(S2CellCenterToGeography::ExecuteCast), 0);
+
+  // geography to s2_cell_center must be explicit (can move a point up to 1 cm,
+  // fails for input that is not a single point)
+  ExtensionUtil::RegisterCastFunction(
+      instance, Types::GEOGRAPHY(), Types::S2_CELL_CENTER(),
+      BoundCastInfo(S2CellCenterFromGeography::ExecuteCast), 1);
+
+  // s2_cell to geography can be implicit (never fails for valid input)
   ExtensionUtil::RegisterCastFunction(instance, Types::S2_CELL(), Types::GEOGRAPHY(),
-                                      BoundCastInfo(S2CellToGeography::ExecuteCast), 1);
-  ExtensionUtil::RegisterCastFunction(instance, Types::GEOGRAPHY(), Types::S2_CELL(),
-                                      BoundCastInfo(S2CellFromGeography::ExecuteCast), 1);
+                                      BoundCastInfo(S2CellToGeography::ExecuteCast), 0);
 
-  S2CellFromWKB::Register(instance);
+  // s2_cell_union to geography can be implicit
+  ExtensionUtil::RegisterCastFunction(
+      instance, Types::S2_CELL_UNION(), Types::GEOGRAPHY(),
+      BoundCastInfo(S2CellUnionToGeography::ExecuteCast), 0);
+
+  // s2_cell to s2_cell_union can be implicit
+  ExtensionUtil::RegisterCastFunction(instance, Types::S2_CELL(), Types::S2_CELL_UNION(),
+                                      BoundCastInfo(S2CellUnionFromS2Cell::ExecuteCast),
+                                      0);
+
+  // s2_cell union from storage is explicit
+  ExtensionUtil::RegisterCastFunction(
+      instance, LogicalType::LIST(Types::S2_CELL()), Types::S2_CELL_UNION(),
+      BoundCastInfo(S2CellUnionFromStorage::ExecuteCast), 1);
+  ExtensionUtil::RegisterCastFunction(
+      instance, LogicalType::LIST(LogicalType::UBIGINT), Types::S2_CELL_UNION(),
+      BoundCastInfo(S2CellUnionFromStorage::ExecuteCast), 1);
+  ExtensionUtil::RegisterCastFunction(
+      instance, LogicalType::LIST(LogicalType::BIGINT), Types::S2_CELL_UNION(),
+      BoundCastInfo(S2CellUnionFromStorage::ExecuteCast), 1);
+
+  // Explicit casts: s2_cell to/from s2_cell_center
+  ExtensionUtil::RegisterCastFunction(instance, Types::S2_CELL_CENTER(), Types::S2_CELL(),
+                                      BoundCastInfo(ExecuteNoopCast), 1);
+  ExtensionUtil::RegisterCastFunction(instance, Types::S2_CELL(), Types::S2_CELL_CENTER(),
+                                      BoundCastInfo(ExecuteNoopCast), 1);
+
+  S2CellCenterFromWKB::Register(instance);
   S2CellToString<ToToken>::Register(instance, "s2_cell_token");
   S2CellFromString<FromToken>::Register(instance, "s2_cell_from_token");
 
-  S2CellToDouble<Area>::Register(instance, "s2_cell_area");
-  S2CellToDouble<AreaApprox>::Register(instance, "s2_cell_area_approx");
-  S2CellToInt8<Level>::Register(instance, "s2_cell_level");
+  S2CellToInt8<Level>::Register(instance, "s2_cell_level", Types::S2_CELL());
 
   S2CellVertex::Register(instance);
 
   S2BinaryCellPredicate<Contains>::Register(instance, "s2_cell_contains");
-  S2BinaryCellPredicate<MayIntersect>::Register(instance, "s2_cell_may_intersect");
+  S2BinaryCellPredicate<MayIntersect>::Register(instance, "s2_cell_intersects");
   S2CellToCell<Child>::Register(instance, "s2_cell_child");
   S2CellToCell<Parent>::Register(instance, "s2_cell_parent");
   S2CellToCell<EdgeNeighbor>::Register(instance, "s2_cell_edge_neighbor");

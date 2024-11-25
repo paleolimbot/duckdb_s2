@@ -1,0 +1,17 @@
+# name: test/sql/bounds.test
+# description: test geography extension cell operations
+# group: [geography]
+
+# Require statement will ensure this test is run with this extension loaded
+require geography
+
+query I
+SELECT s2_covering_cell_ids(s2_data_country('Fiji'));
+----
+[3/13002011, 3/1300232, 3/130030, 3/130031, 3/130033, 3/130100, 3/2032333, 3/20330000000]
+
+# Check optimization for the cell center geography
+query I
+SELECT s2_covering_cell_ids('POINT (-64 45)'::GEOGRAPHY::S2_CELL_CENTER);
+----
+[2/112230310012123001312232330210]
