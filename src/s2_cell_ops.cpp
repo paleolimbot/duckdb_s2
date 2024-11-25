@@ -58,6 +58,30 @@ struct S2CellCenterFromGeography {
   }
 };
 
+struct S2CellUnionFromS2Cell {
+  static inline bool ExecuteCast(Vector& source, Vector& result, idx_t count,
+                                 CastParameters& parameters) {
+    Execute(source, result, count);
+    return true;
+  }
+
+  static inline void Execute(Vector& source, Vector& result, idx_t count) {
+    ListVector::Reserve(result, count);
+    uint64_t offset = 0;
+
+    UnaryExecutor::Execute<int64_t, list_entry_t>(
+        source, result, count, [&](int64_t cell_id) {
+          S2CellId cell(cell_id);
+          if (!cell.is_valid()) {
+            return list_entry_t{0, 0};
+          } else {
+            ListVector::PushBack(result, Value::UHUGEINT(cell_id));
+            return list_entry_t{offset++, 1};
+          }
+        });
+  }
+};
+
 // Experimental version of a WKB parser that only handles points (or multipoints
 // with a single point). If the s2geography WKB parser were faster this probably
 // wouldn't be needed.
@@ -407,6 +431,11 @@ void RegisterS2CellOps(DatabaseInstance& instance) {
   // s2_cell to geography can be implicit (never fails for valid input)
   ExtensionUtil::RegisterCastFunction(instance, Types::S2_CELL(), Types::GEOGRAPHY(),
                                       BoundCastInfo(S2CellToGeography::ExecuteCast), 0);
+
+  // s2_cell to s2_cell_union can be implicit
+  ExtensionUtil::RegisterCastFunction(instance, Types::S2_CELL(), Types::S2_CELL_UNION(),
+                                      BoundCastInfo(S2CellUnionFromS2Cell::ExecuteCast),
+                                      0);
 
   // Explicit casts: s2_cell to/from s2_cell_center
   ExtensionUtil::RegisterCastFunction(instance, Types::S2_CELL_CENTER(), Types::S2_CELL(),
