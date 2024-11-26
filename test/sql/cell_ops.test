@@ -5,13 +5,170 @@
 # Require statement will ensure this test is run with this extension loaded
 require geography
 
+# Cell/center casts
 query I
-SELECT 'POINT (-64 45)'::GEOGRAPHY::S2_CELL::VARCHAR;
+SELECT '2/112230310012123001312232330210'::S2_CELL_CENTER::S2_CELL;
 ----
 2/112230310012123001312232330210
 
 query I
-SELECT s2_cell_token('POINT (-64 45)'::GEOGRAPHY::S2_CELL);
+SELECT '2/112230310012123001312232330210'::S2_CELL::S2_CELL_CENTER;
+----
+2/112230310012123001312232330210
+
+query I
+SELECT 'POINT (-64 45)'::GEOGRAPHY::S2_CELL_CENTER;
+----
+2/112230310012123001312232330210
+
+# Cell union casts
+query I
+SELECT '2/'::S2_CELL::S2_CELL_UNION
+----
+[2/]
+
+query I
+SELECT 'invalid'::S2_CELL::S2_CELL_UNION
+----
+[]
+
+# Geography casts
+query I
+SELECT ('2/112230310012123001312232330210'::S2_CELL_CENTER::GEOGRAPHY).s2_format(6);
+----
+POINT (-64 45)
+
+# Should this be NULL or error?
+query I
+SELECT 'not valid'::S2_CELL_CENTER::GEOGRAPHY;
+----
+POINT EMPTY
+
+query I
+SELECT 'POINT (-64 45)'::GEOGRAPHY::S2_CELL_CENTER;
+----
+2/112230310012123001312232330210
+
+statement error
+SELECT 'LINESTRING (-64 45, 0 0)'::GEOGRAPHY::S2_CELL_CENTER::VARCHAR;
+----
+Invalid Input Error: Can't convert geography that is not empty nor a single point to S2_CELL_CENTER
+
+query I
+SELECT ('2/0'::S2_CELL::S2_CELL_UNION::GEOGRAPHY).s2_format(6);
+----
+POLYGON ((45 35.26439, 90 45, 0 90, 0 45, 45 35.26439))
+
+# Cell union from storage gets sorted on the way in
+
+# (Except this cast, which isn't called even though it's regiestered)
+#query I
+#SELECT ['1/'::S2_CELL, '0/'::S2_CELL]::S2_CELL_UNION;
+#----
+#[0/, 1/]
+
+query I
+SELECT ['1/'::S2_CELL::UBIGINT, '0/'::S2_CELL::UBIGINT]::S2_CELL_UNION;
+----
+[0/, 1/]
+
+query I
+SELECT ['1/'::S2_CELL::BIGINT, '0/'::S2_CELL::BIGINT]::S2_CELL_UNION;
+----
+[0/, 1/]
+
+
+# cell from lon/lat
+query I
+SELECT s2_cellfromlonlat(-64, 45)
+----
+2/112230310012123001312232330210
+
+query I
+SELECT s2_cellfromlonlat('NaN', 'NaN')
+----
+Invalid: ffffffffffffffff
+
+# Special-cased WKB reader for cell center (should work for anything
+# with exactly one valid point)
+query I
+SELECT s2_aswkb('POINT (-64 45)'::GEOGRAPHY).s2_cellfromwkb()
+----
+2/112230310012123001312232330210
+
+query I
+SELECT s2_aswkb('GEOMETRYCOLLECTION(POINT (-64 45))'::GEOGRAPHY).s2_cellfromwkb()
+----
+2/112230310012123001312232330210
+
+query I
+SELECT s2_aswkb('GEOMETRYCOLLECTION(POLYGON EMPTY, POINT (-64 45))'::GEOGRAPHY).s2_cellfromwkb()
+----
+2/112230310012123001312232330210
+
+# Also should work for empty things
+query I
+SELECT s2_aswkb('POINT EMPTY'::GEOGRAPHY).s2_cellfromwkb()
+----
+Invalid: ffffffffffffffff
+
+query I
+SELECT s2_aswkb('LINESTRING EMPTY'::GEOGRAPHY).s2_cellfromwkb()
+----
+Invalid: ffffffffffffffff
+
+query I
+SELECT s2_aswkb('POLYGON EMPTY'::GEOGRAPHY).s2_cellfromwkb()
+----
+Invalid: ffffffffffffffff
+
+query I
+SELECT s2_aswkb('GEOMETRYCOLLECTION (POINT EMPTY, LINESTRING EMPTY, POLYGON EMPTY)'::GEOGRAPHY).s2_cellfromwkb()
+----
+Invalid: ffffffffffffffff
+
+# ..but error for non-things that aren't exactly one point
+statement error
+SELECT s2_aswkb('MULTIPOINT (-64 45, 0 0)'::GEOGRAPHY).s2_cellfromwkb()
+----
+Invalid Input Error: Can't parse WKB with more than one point to S2_CELL_CENTER
+
+statement error
+SELECT s2_aswkb('LINESTRING (-64 45, 0 0)'::GEOGRAPHY).s2_cellfromwkb()
+----
+Invalid Input Error: Can't parse WKB with non-point input to S2_CELL_CENTER
+
+# Getting an arbitrary cell from WKB input should work for any type but
+# never parse past the first point
+query I
+SELECT s2_aswkb('LINESTRING (-64 45, 0 0)'::GEOGRAPHY).s2_arbitrarycellfromwkb()
+----
+2/112230310012123001312232330210
+
+query I
+SELECT s2_aswkb('POLYGON ((-64 45, 0 0, 0 1, 0 2))'::GEOGRAPHY).s2_arbitrarycellfromwkb()
+----
+2/112230310012123001312232330210
+
+query I
+SELECT s2_aswkb('GEOMETRYCOLLECTION(POLYGON EMPTY, LINESTRING (-64 45, 0 0))'::GEOGRAPHY).s2_arbitrarycellfromwkb()
+----
+2/112230310012123001312232330210
+
+query I
+SELECT s2_aswkb('GEOMETRYCOLLECTION (POINT EMPTY, LINESTRING EMPTY, POLYGON EMPTY)'::GEOGRAPHY).s2_arbitrarycellfromwkb()
+----
+Invalid: ffffffffffffffff
+
+# Cast cell to geography
+query I
+SELECT ('2/1122303'::S2_CELL::GEOGRAPHY).s2_format(6);
+----
+POLYGON ((-63.470273 44.898834, -64.286611 45.098989, -64.779066 44.581998, -63.973842 44.388923, -63.470273 44.898834))
+
+# Cell token string representation
+query I
+SELECT s2_cell_token('2/112230310012123001312232330210'::S2_CELL);
 ----
 4b59a0cd83b5de49
 
@@ -19,3 +176,120 @@ query I
 SELECT s2_cell_from_token('4b59a0cd83b5de49');
 ----
 2/112230310012123001312232330210
+
+# Cell level
+# Should this be NULL or error?
+query I
+SELECT s2_cell_from_token('foofy')::VARCHAR;
+----
+Invalid: 0000000000000000
+
+# Cell ops
+query I
+SELECT s2_cell_level('2/112230310012123001312232330210'::S2_CELL);
+----
+30
+
+# Not sure if this should error or not (ffffffffffffffff can be used in indexes)
+query I
+SELECT s2_cell_level('not valid'::S2_CELL);
+----
+-1
+
+# Cell parent/child/neighbor
+query I
+SELECT ('2/112230310012123001312232330210'::S2_CELL).s2_cell_parent(0)
+----
+2/
+
+query I
+SELECT ('2/112230310012123001312232330210'::S2_CELL).s2_cell_parent(-30)
+----
+2/
+
+query I
+SELECT ('2/'::S2_CELL).s2_cell_parent(1);
+----
+Invalid: ffffffffffffffff
+
+query I
+SELECT ('2/'::S2_CELL).s2_cell_child(0);
+----
+2/0
+
+query I
+SELECT ('2/'::S2_CELL).s2_cell_child(-1);
+----
+Invalid: ffffffffffffffff
+
+query I
+SELECT ('2/'::S2_CELL).s2_cell_edge_neighbor(0);
+----
+1/
+
+query I
+SELECT ('2/'::S2_CELL).s2_cell_edge_neighbor(-1);
+----
+Invalid: ffffffffffffffff
+
+# Cell predicates
+query I
+SELECT s2_cell_contains('2/'::S2_CELL, '2/0'::S2_CELL);
+----
+true
+
+query I
+SELECT s2_cell_contains('2/0'::S2_CELL, '2/'::S2_CELL);
+----
+false
+
+query I
+SELECT s2_cell_contains('invalid'::S2_CELL, '2/'::S2_CELL);
+----
+false
+
+query I
+SELECT s2_cell_contains('2/'::S2_CELL, 'invalid'::S2_CELL);
+----
+false
+
+query I
+SELECT s2_cell_intersects('2/'::S2_CELL, '2/0'::S2_CELL);
+----
+true
+
+query I
+SELECT s2_cell_intersects('2/0'::S2_CELL, '2/'::S2_CELL);
+----
+true
+
+query I
+SELECT s2_cell_intersects('2/'::S2_CELL, '3/'::S2_CELL);
+----
+false
+
+query I
+SELECT s2_cell_intersects('invalid'::S2_CELL, '2/'::S2_CELL);
+----
+false
+
+query I
+SELECT s2_cell_intersects('2/'::S2_CELL, 'invalid'::S2_CELL);
+----
+false
+
+# Sanity check of a few of these concept using the example data
+query I
+SELECT sum((s2_cellfromlonlat(s2_x(geog), s2_y(geog))::S2_CELL).s2_intersects(geog)::INTEGER) FROM s2_data_cities();
+----
+243
+
+query I
+SELECT sum((s2_arbitrarycellfromwkb(geog.s2_aswkb())::S2_CELL).s2_intersects(geog)::INTEGER) FROM s2_data_countries();
+----
+177
+
+query I
+SELECT sum((s2_cellfromwkb(geog.s2_aswkb())::S2_CELL).s2_intersects(geog)::INTEGER) FROM s2_data_cities();
+----
+243

@@ -185,7 +185,8 @@ set(EXTENSION_SOURCES
     src/s2_functions_io.cpp
     src/s2_binary_index_ops.cpp
     src/s2_data.cpp
-    src/s2_accessors.cpp)
+    src/s2_accessors.cpp
+    src/s2_bounds.cpp)
 
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
 build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})

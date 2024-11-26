@@ -78,3 +78,33 @@ query I
 SELECT s2_length('LINESTRING (0 1, 2 3)'::GEOGRAPHY).round()
 ----
 314403
+
+query I
+SELECT s2_x('POINT EMPTY'::GEOGRAPHY)
+----
+NaN
+
+query I
+SELECT s2_x('LINESTRING (0 1, 1 2)'::GEOGRAPHY)
+----
+NaN
+
+query I
+SELECT s2_x('POINT (-64 45)'::GEOGRAPHY).round()
+----
+-64
+
+query I
+SELECT s2_y('POINT (-64 45)'::GEOGRAPHY).round()
+----
+45
+
+query I
+SELECT s2_x('POINT (-64 45)'::GEOGRAPHY::S2_CELL_CENTER).round()
+----
+-64
+
+query I
+SELECT s2_y('POINT (-64 45)'::GEOGRAPHY::S2_CELL_CENTER).round()
+----
+45
