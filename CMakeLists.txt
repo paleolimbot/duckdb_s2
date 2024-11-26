@@ -179,6 +179,7 @@ include_directories(src/include)
 
 set(EXTENSION_SOURCES
     src/geography_extension.cpp
+    src/function_builder.cpp
     src/s2_dependencies.cpp
     src/s2_types.cpp
     src/s2_cell_ops.cpp

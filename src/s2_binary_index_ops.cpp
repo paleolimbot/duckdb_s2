@@ -8,6 +8,7 @@
 
 #include "s2geography/build.h"
 
+#include "function_builder.hpp"
 #include "global_options.hpp"
 
 namespace duckdb {
@@ -18,38 +19,117 @@ namespace {
 
 struct S2BinaryIndexOp {
   static void Register(DatabaseInstance& instance) {
-    auto mayintersect =
-        ScalarFunction("s2_mayintersect", {Types::GEOGRAPHY(), Types::GEOGRAPHY()},
-                       LogicalType::BOOLEAN, ExecuteMayIntersectFn);
-    ExtensionUtil::RegisterFunction(instance, mayintersect);
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_mayintersect", [](ScalarFunctionBuilder& func) {
+          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("geog1", Types::GEOGRAPHY());
+            variant.AddParameter("geog2", Types::GEOGRAPHY());
+            variant.SetReturnType(LogicalType::BOOLEAN);
+            variant.SetFunction(ExecuteMayIntersectFn);
+          });
 
-    auto intersects =
-        ScalarFunction("s2_intersects", {Types::GEOGRAPHY(), Types::GEOGRAPHY()},
-                       LogicalType::BOOLEAN, ExecuteIntersectsFn);
-    ExtensionUtil::RegisterFunction(instance, intersects);
+          func.SetDescription("Returns true if the two geographies may intersect.");
+          // TODO: Example
 
-    auto contains =
-        ScalarFunction("s2_contains", {Types::GEOGRAPHY(), Types::GEOGRAPHY()},
-                       LogicalType::BOOLEAN, ExecuteContainsFn);
-    ExtensionUtil::RegisterFunction(instance, contains);
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "predicate");
+        });
 
-    auto equals = ScalarFunction("s2_equals", {Types::GEOGRAPHY(), Types::GEOGRAPHY()},
-                                 LogicalType::BOOLEAN, ExecuteEqualsFn);
-    ExtensionUtil::RegisterFunction(instance, equals);
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_intersects", [](ScalarFunctionBuilder& func) {
+          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("geog1", Types::GEOGRAPHY());
+            variant.AddParameter("geog2", Types::GEOGRAPHY());
+            variant.SetReturnType(LogicalType::BOOLEAN);
+            variant.SetFunction(ExecuteIntersectsFn);
+          });
 
-    auto intersection =
-        ScalarFunction("s2_intersection", {Types::GEOGRAPHY(), Types::GEOGRAPHY()},
-                       Types::GEOGRAPHY(), ExecuteIntersectionFn);
-    ExtensionUtil::RegisterFunction(instance, intersection);
+          func.SetDescription("Returns true if the two geographies intersect.");
+          // TODO: Example
 
-    auto difference =
-        ScalarFunction("s2_difference", {Types::GEOGRAPHY(), Types::GEOGRAPHY()},
-                       Types::GEOGRAPHY(), ExecuteDifferenceFn);
-    ExtensionUtil::RegisterFunction(instance, difference);
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "predicate");
+        });
 
-    auto union_ = ScalarFunction("s2_union", {Types::GEOGRAPHY(), Types::GEOGRAPHY()},
-                                 Types::GEOGRAPHY(), ExecuteUnionFn);
-    ExtensionUtil::RegisterFunction(instance, union_);
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_contains", [](ScalarFunctionBuilder& func) {
+          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("geog1", Types::GEOGRAPHY());
+            variant.AddParameter("geog2", Types::GEOGRAPHY());
+            variant.SetReturnType(LogicalType::BOOLEAN);
+            variant.SetFunction(ExecuteContainsFn);
+          });
+
+          func.SetDescription("Returns true if the first geography contains the second.");
+          // TODO: Example
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "predicate");
+        });
+
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_equals", [](ScalarFunctionBuilder& func) {
+          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("geog1", Types::GEOGRAPHY());
+            variant.AddParameter("geog2", Types::GEOGRAPHY());
+            variant.SetReturnType(LogicalType::BOOLEAN);
+            variant.SetFunction(ExecuteEqualsFn);
+          });
+
+          func.SetDescription("Returns true if the two geographies are equal.");
+          // TODO: Example
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "predicate");
+        });
+
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_intersection", [](ScalarFunctionBuilder& func) {
+          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("geog1", Types::GEOGRAPHY());
+            variant.AddParameter("geog2", Types::GEOGRAPHY());
+            variant.SetReturnType(Types::GEOGRAPHY());
+            variant.SetFunction(ExecuteIntersectionFn);
+          });
+
+          func.SetDescription("Returns the intersection of two geographies.");
+          // TODO: Example
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "overlay");
+        });
+
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_difference", [](ScalarFunctionBuilder& func) {
+          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("geog1", Types::GEOGRAPHY());
+            variant.AddParameter("geog2", Types::GEOGRAPHY());
+            variant.SetReturnType(Types::GEOGRAPHY());
+            variant.SetFunction(ExecuteDifferenceFn);
+          });
+
+          func.SetDescription("Returns the difference of two geographies.");
+          // TODO: Example
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "overlay");
+        });
+
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_union", [](ScalarFunctionBuilder& func) {
+          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("geog1", Types::GEOGRAPHY());
+            variant.AddParameter("geog2", Types::GEOGRAPHY());
+            variant.SetReturnType(Types::GEOGRAPHY());
+            variant.SetFunction(ExecuteUnionFn);
+          });
+
+          func.SetDescription("Returns the union of two geographies.");
+          // TODO: Example
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "overlay");
+        });
   }
 
   using UniqueGeography = std::unique_ptr<s2geography::Geography>;
