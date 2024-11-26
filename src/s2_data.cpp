@@ -4,12 +4,13 @@
 #include "duckdb/main/extension_util.hpp"
 
 #include <absl/base/config.h>
-#include <openssl/opensslv.h>
 #include <s2geography.h>
 
 #include "s2_data_static.hpp"
 #include "s2_geography_serde.hpp"
 #include "s2_types.hpp"
+
+#include "function_builder.hpp"
 
 namespace duckdb {
 
@@ -143,9 +144,19 @@ const std::vector<City>& ItemList() {
 template <typename T>
 struct S2DataScalar {
   static void Register(DatabaseInstance& instance, const char* fn_name) {
-    auto fn =
-        ScalarFunction(fn_name, {LogicalType::VARCHAR}, Types::GEOGRAPHY(), ExecuteFn);
-    ExtensionUtil::RegisterFunction(instance, fn);
+    FunctionBuilder::RegisterScalar(instance, fn_name, [](ScalarFunctionBuilder& func) {
+      func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+        variant.AddParameter("name", LogicalType::VARCHAR);
+        variant.SetReturnType(Types::GEOGRAPHY());
+        variant.SetFunction(ExecuteFn);
+      });
+
+      // TODO: Example
+      // TODO: Description
+
+      func.SetTag("ext", "geography");
+      func.SetTag("category", "data");
+    });
   }
 
   static void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {

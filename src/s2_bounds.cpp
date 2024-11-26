@@ -11,6 +11,8 @@
 #include "s2_geography_serde.hpp"
 #include "s2_types.hpp"
 
+#include "function_builder.hpp"
+
 namespace duckdb {
 
 namespace duckdb_s2 {
@@ -19,9 +21,20 @@ namespace {
 
 struct S2Covering {
   static void Register(DatabaseInstance& instance) {
-    auto fn = ScalarFunction("s2_covering", {Types::GEOGRAPHY()}, Types::S2_CELL_UNION(),
-                             ExecuteFn);
-    ExtensionUtil::RegisterFunction(instance, fn);
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_covering", [](ScalarFunctionBuilder& func) {
+          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("geog", Types::GEOGRAPHY());
+            variant.SetReturnType(Types::S2_CELL_UNION());
+            variant.SetFunction(ExecuteFn);
+          });
+
+          func.SetDescription("Returns the S2 cell covering of the geography.");
+          func.SetExample("SELECT s2_covering('POINT(0 0)') AS covering;");
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "bounds");
+        });
   }
 
   static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {

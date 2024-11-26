@@ -14,15 +14,29 @@
 #include "s2geography/wkt-reader.h"
 #include "s2geography/wkt-writer.h"
 
+#include "function_builder.hpp"
+
 namespace duckdb {
 
 namespace duckdb_s2 {
 
 struct S2GeogFromText {
   static void Register(DatabaseInstance& instance) {
-    auto fn = ScalarFunction("s2_geogfromtext", {LogicalType::VARCHAR},
-                             Types::GEOGRAPHY(), ExecuteFn);
-    ExtensionUtil::RegisterFunction(instance, fn);
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_geogfromtext", [](ScalarFunctionBuilder& func) {
+          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("wkt", LogicalType::VARCHAR);
+            variant.SetReturnType(Types::GEOGRAPHY());
+            variant.SetFunction(ExecuteFn);
+          });
+
+          func.SetDescription("Returns the geography from a WKT string.");
+          // TODO: Example
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "conversion");
+        });
+
     ExtensionUtil::RegisterCastFunction(instance, LogicalType::VARCHAR,
                                         Types::GEOGRAPHY(), BoundCastInfo(ExecuteCast),
                                         1);
@@ -51,14 +65,37 @@ struct S2GeogFromText {
 
 struct S2AsText {
   static void Register(DatabaseInstance& instance) {
-    auto fn = ScalarFunction("s2_astext", {Types::GEOGRAPHY()}, LogicalType::VARCHAR,
-                             ExecuteFn);
-    ExtensionUtil::RegisterFunction(instance, fn);
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_astext", [](ScalarFunctionBuilder& func) {
+          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("geog", Types::GEOGRAPHY());
+            variant.SetReturnType(LogicalType::VARCHAR);
+            variant.SetFunction(ExecuteFn);
+          });
 
-    auto fn_format =
-        ScalarFunction("s2_format", {Types::GEOGRAPHY(), LogicalType::TINYINT},
-                       LogicalType::VARCHAR, ExecuteFnPrec);
-    ExtensionUtil::RegisterFunction(instance, fn_format);
+          func.SetDescription("Returns the WKT string of the geography.");
+          // TODO: Example
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "conversion");
+        });
+
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_format", [](ScalarFunctionBuilder& func) {
+          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("geog", Types::GEOGRAPHY());
+            variant.AddParameter("precision", LogicalType::TINYINT);
+            variant.SetReturnType(LogicalType::VARCHAR);
+            variant.SetFunction(ExecuteFnPrec);
+          });
+
+          func.SetDescription(
+              "Returns the WKT string of the geography with a given precision.");
+          // TODO: Example
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "conversion");
+        });
 
     ExtensionUtil::RegisterCastFunction(instance, Types::GEOGRAPHY(),
                                         LogicalType::VARCHAR, BoundCastInfo(ExecuteCast),
@@ -107,9 +144,20 @@ struct S2AsText {
 
 struct S2GeogFromWKB {
   static void Register(DatabaseInstance& instance) {
-    auto fn = ScalarFunction("s2_geogfromwkb", {LogicalType::BLOB}, Types::GEOGRAPHY(),
-                             ExecuteFn);
-    ExtensionUtil::RegisterFunction(instance, fn);
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_geogfromwkb", [](ScalarFunctionBuilder& func) {
+          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("wkb", LogicalType::BLOB);
+            variant.SetReturnType(Types::GEOGRAPHY());
+            variant.SetFunction(ExecuteFn);
+          });
+
+          func.SetDescription("Converts a WKB blob to a geography.");
+          // TODO: Example
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "conversion");
+        });
   }
 
   static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
@@ -130,9 +178,20 @@ struct S2GeogFromWKB {
 
 struct S2AsWKB {
   static void Register(DatabaseInstance& instance) {
-    auto fn =
-        ScalarFunction("s2_aswkb", {Types::GEOGRAPHY()}, LogicalType::BLOB, ExecuteFn);
-    ExtensionUtil::RegisterFunction(instance, fn);
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_aswkb", [](ScalarFunctionBuilder& func) {
+          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("geog", Types::GEOGRAPHY());
+            variant.SetReturnType(LogicalType::BLOB);
+            variant.SetFunction(ExecuteFn);
+          });
+
+          func.SetDescription("Returns the WKB blob of the geography.");
+          // TODO: Example
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "conversion");
+        });
   }
 
   static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
@@ -152,9 +211,21 @@ struct S2AsWKB {
 
 struct S2GeogPrepare {
   static void Register(DatabaseInstance& instance) {
-    auto fn =
-        ScalarFunction("s2_prepare", {Types::GEOGRAPHY()}, Types::GEOGRAPHY(), ExecuteFn);
-    ExtensionUtil::RegisterFunction(instance, fn);
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_prepare", [](ScalarFunctionBuilder& func) {
+          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("geog", Types::GEOGRAPHY());
+            variant.SetReturnType(Types::GEOGRAPHY());
+            variant.SetFunction(ExecuteFn);
+          });
+
+          func.SetDescription(
+              "Prepares a geography for faster predicate and overlay operations.");
+          // TODO: Example
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "conversion");
+        });
   }
 
   static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {

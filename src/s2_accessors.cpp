@@ -2,6 +2,8 @@
 #include "duckdb/main/database.hpp"
 #include "duckdb/main/extension_util.hpp"
 
+#include "function_builder.hpp"
+
 #include "s2/s2earth.h"
 #include "s2geography/accessors.h"
 
@@ -17,9 +19,20 @@ namespace {
 
 struct S2IsEmpty {
   static void Register(DatabaseInstance& instance) {
-    auto fn = ScalarFunction("s2_isempty", {Types::GEOGRAPHY()}, LogicalType::BOOLEAN,
-                             ExecuteFn);
-    ExtensionUtil::RegisterFunction(instance, fn);
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_isempty", [](ScalarFunctionBuilder& func) {
+          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("geog", Types::GEOGRAPHY());
+            variant.SetReturnType(LogicalType::BOOLEAN);
+            variant.SetFunction(ExecuteFn);
+          });
+
+          func.SetDescription("Returns true if the geography is empty.");
+          func.SetExample("SELECT s2_isempty('POINT(0 0)') AS is_empty;");
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "accessors");
+        });
   }
 
   static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
@@ -38,9 +51,18 @@ struct S2IsEmpty {
 
 struct S2Area {
   static void Register(DatabaseInstance& instance) {
-    auto fn =
-        ScalarFunction("s2_area", {Types::GEOGRAPHY()}, LogicalType::DOUBLE, ExecuteFn);
-    ExtensionUtil::RegisterFunction(instance, fn);
+    FunctionBuilder::RegisterScalar(instance, "s2_area", [](ScalarFunctionBuilder& func) {
+      func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+        variant.AddParameter("geog", Types::GEOGRAPHY());
+        variant.SetReturnType(LogicalType::DOUBLE);
+        variant.SetFunction(ExecuteFn);
+      });
+
+      func.SetDescription("Returns the area of the geography.");
+
+      func.SetTag("ext", "geography");
+      func.SetTag("category", "accessors");
+    });
   }
 
   static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
@@ -75,9 +97,19 @@ struct S2Area {
 
 struct S2Perimieter {
   static void Register(DatabaseInstance& instance) {
-    auto fn = ScalarFunction("s2_perimeter", {Types::GEOGRAPHY()}, LogicalType::DOUBLE,
-                             ExecuteFn);
-    ExtensionUtil::RegisterFunction(instance, fn);
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_perimeter", [](ScalarFunctionBuilder& func) {
+          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("geog", Types::GEOGRAPHY());
+            variant.SetReturnType(LogicalType::DOUBLE);
+            variant.SetFunction(ExecuteFn);
+          });
+
+          func.SetDescription("Returns the perimeter of the geography.");
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "accessors");
+        });
   }
 
   static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
@@ -110,9 +142,19 @@ struct S2Perimieter {
 
 struct S2Length {
   static void Register(DatabaseInstance& instance) {
-    auto fn =
-        ScalarFunction("s2_length", {Types::GEOGRAPHY()}, LogicalType::DOUBLE, ExecuteFn);
-    ExtensionUtil::RegisterFunction(instance, fn);
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_length", [](ScalarFunctionBuilder& func) {
+          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("geog", Types::GEOGRAPHY());
+            variant.SetReturnType(LogicalType::DOUBLE);
+            variant.SetFunction(ExecuteFn);
+          });
+
+          func.SetDescription("Returns the length of the geography.");
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "accessors");
+        });
   }
 
   static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
@@ -146,13 +188,31 @@ struct S2Length {
 
 struct S2XY {
   static void Register(DatabaseInstance& instance) {
-    auto fn_x =
-        ScalarFunction("s2_x", {Types::GEOGRAPHY()}, LogicalType::DOUBLE, ExecuteFnX);
-    ExtensionUtil::RegisterFunction(instance, fn_x);
+    FunctionBuilder::RegisterScalar(instance, "s2_x", [](ScalarFunctionBuilder& func) {
+      func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+        variant.AddParameter("geog", Types::GEOGRAPHY());
+        variant.SetReturnType(LogicalType::DOUBLE);
+        variant.SetFunction(ExecuteFnX);
+      });
 
-    auto fn_y =
-        ScalarFunction("s2_y", {Types::GEOGRAPHY()}, LogicalType::DOUBLE, ExecuteFnY);
-    ExtensionUtil::RegisterFunction(instance, fn_y);
+      func.SetDescription("Returns the x coordinate of the geography.");
+
+      func.SetTag("ext", "geography");
+      func.SetTag("category", "accessors");
+    });
+
+    FunctionBuilder::RegisterScalar(instance, "s2_y", [](ScalarFunctionBuilder& func) {
+      func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+        variant.AddParameter("geog", Types::GEOGRAPHY());
+        variant.SetReturnType(LogicalType::DOUBLE);
+        variant.SetFunction(ExecuteFnY);
+      });
+
+      func.SetDescription("Returns the y coordinate of the geography.");
+
+      func.SetTag("ext", "geography");
+      func.SetTag("category", "accessors");
+    });
   }
 
   static inline void ExecuteFnX(DataChunk& args, ExpressionState& state, Vector& result) {
