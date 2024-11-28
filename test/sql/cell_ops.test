@@ -232,6 +232,27 @@ SELECT ('2/'::S2_CELL).s2_cell_edge_neighbor(-1);
 ----
 Invalid: ffffffffffffffff
 
+# Min/max ranges
+query I
+SELECT ('2/'::S2_CELL).s2_cell_range_min()
+----
+2/000000000000000000000000000000
+
+query I
+SELECT ('2/'::S2_CELL).s2_cell_range_max()
+----
+2/333333333333333333333333333333
+
+query I
+SELECT ('foofy'::S2_CELL).s2_cell_range_min()
+----
+Invalid: ffffffffffffffff
+
+query I
+SELECT ('foofy'::S2_CELL).s2_cell_range_max()
+----
+Invalid: ffffffffffffffff
+
 # Cell predicates
 query I
 SELECT s2_cell_contains('2/'::S2_CELL, '2/0'::S2_CELL);
