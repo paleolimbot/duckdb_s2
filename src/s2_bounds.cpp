@@ -35,22 +35,54 @@ struct S2Covering {
           func.SetTag("ext", "geography");
           func.SetTag("category", "bounds");
         });
+
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_covering_fixed_level", [](ScalarFunctionBuilder& func) {
+          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("geog", Types::GEOGRAPHY());
+            variant.AddParameter("fixed_level", LogicalType::INTEGER);
+            variant.SetReturnType(Types::S2_CELL_UNION());
+            variant.SetFunction(ExecuteFnFixedLevel);
+          });
+
+          func.SetDescription(
+              "Returns the S2 cell covering of the geography with a fixed level.");
+          func.SetExample("SELECT s2_covering_fixed_level('POINT(0 0)', 4) AS covering;");
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "bounds");
+        });
   }
 
   static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
-    Execute(args.data[0], result, args.size());
+    S2RegionCoverer coverer;
+    Execute(args.data[0], result, args.size(), coverer);
   }
 
-  static void Execute(Vector& source, Vector& result, idx_t count) {
-    // Should make this a function parameter
-    int max_cells = 8;
+  static inline void ExecuteFnFixedLevel(DataChunk& args, ExpressionState& state,
+                                         Vector& result) {
+    Vector& max_cells_param = args.data[1];
+    if (max_cells_param.GetVectorType() != VectorType::CONSTANT_VECTOR) {
+      throw InvalidInputException("s2_covering_fixed_level(): level must be a constant");
+    }
 
-    ListVector::Reserve(result, count * max_cells);
+    int fixed_level = max_cells_param.GetValue(0).GetValue<int>();
+    if (fixed_level < 0 || fixed_level > S2CellId::kMaxLevel) {
+      throw InvalidInputException(
+          "s2_covering_fixed_level(): level must be between 0 and 30");
+    }
+
+    S2RegionCoverer coverer;
+    coverer.mutable_options()->set_fixed_level(fixed_level);
+    Execute(args.data[0], result, args.size(), coverer);
+  }
+
+  static void Execute(Vector& source, Vector& result, idx_t count,
+                      S2RegionCoverer& coverer) {
+    ListVector::Reserve(result, count * coverer.options().max_cells());
     uint64_t offset = 0;
 
     GeographyDecoder decoder;
-    S2RegionCoverer coverer;
-    coverer.mutable_options()->set_max_cells(max_cells);
 
     UnaryExecutor::Execute<string_t, list_entry_t>(
         source, result, count, [&](string_t geog_str) {
@@ -62,7 +94,9 @@ struct S2Covering {
           switch (decoder.tag.kind) {
             case s2geography::GeographyKind::CELL_CENTER: {
               decoder.DecodeTagAndCovering(geog_str);
-              ListVector::PushBack(result, Value::UBIGINT(decoder.covering[0].id()));
+              S2CellId cell_id =
+                  decoder.covering[0].parent(coverer.options().max_level());
+              ListVector::PushBack(result, Value::UBIGINT(cell_id.id()));
               list_entry_t out{offset, 1};
               offset += 1;
               return out;
