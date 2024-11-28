@@ -739,6 +739,66 @@ struct S2CellToCell {
   }
 };
 
+struct S2CellBounds {
+  static void Register(DatabaseInstance& instance) {
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_cell_range_min", [&](ScalarFunctionBuilder& func) {
+          func.AddVariant([&](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("cell", Types::S2_CELL());
+            variant.SetReturnType(Types::S2_CELL());
+            variant.SetFunction(ExecuteRangeMin);
+          });
+
+          // TODO: Description
+          // TODO: Example
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "cellops");
+        });
+
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_cell_range_max", [&](ScalarFunctionBuilder& func) {
+          func.AddVariant([&](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("cell", Types::S2_CELL());
+            variant.SetReturnType(Types::S2_CELL());
+            variant.SetFunction(ExecuteRangeMax);
+          });
+
+          // TODO: Description
+          // TODO: Example
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "cellops");
+        });
+  }
+
+  static inline void ExecuteRangeMin(DataChunk& args, ExpressionState& state,
+                                     Vector& result) {
+    UnaryExecutor::Execute<int64_t, int64_t>(
+        args.data[0], result, args.size(), [&](int64_t cell_id) {
+          S2CellId cell(cell_id);
+          if (!cell.is_valid()) {
+            return static_cast<int64_t>(S2CellId::Sentinel().id());
+          } else {
+            return static_cast<int64_t>(cell.range_min().id());
+          }
+        });
+  }
+
+  static inline void ExecuteRangeMax(DataChunk& args, ExpressionState& state,
+                                     Vector& result) {
+    UnaryExecutor::Execute<int64_t, int64_t>(
+        args.data[0], result, args.size(), [&](int64_t cell_id) {
+          S2CellId cell(cell_id);
+          if (!cell.is_valid()) {
+            return static_cast<int64_t>(S2CellId::Sentinel().id());
+          } else {
+            return static_cast<int64_t>(cell.range_max().id());
+          }
+        });
+  }
+};
+
 bool ExecuteNoopCast(Vector& source, Vector& result, idx_t count,
                      CastParameters& parameters) {
   result.Reinterpret(source);
@@ -820,6 +880,7 @@ void RegisterS2CellOps(DatabaseInstance& instance) {
   S2BinaryCellPredicate<MayIntersect>::Register(instance, "s2_cell_intersects");
   S2CellToCell<Child>::Register(instance, "s2_cell_child");
   S2CellToCell<Parent>::Register(instance, "s2_cell_parent");
+  S2CellBounds::Register(instance);
   S2CellToCell<EdgeNeighbor>::Register(instance, "s2_cell_edge_neighbor");
 }
 
