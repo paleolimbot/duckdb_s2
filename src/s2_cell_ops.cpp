@@ -153,7 +153,7 @@ struct S2CellUnionToGeography {
             cell_ids[i] = S2CellId(child_ids[item.offset + i]);
           }
 
-          auto cells = S2CellUnion::FromNormalized(std::move(cell_ids));
+          auto cells = S2CellUnion::FromVerbatim(std::move(cell_ids));
           auto poly = make_uniq<S2Polygon>();
           poly->InitToCellUnionBorder(cells);
           s2geography::PolygonGeography geog(std::move(poly));
