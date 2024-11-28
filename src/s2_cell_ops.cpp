@@ -153,8 +153,9 @@ struct S2CellUnionToGeography {
             cell_ids[i] = S2CellId(child_ids[item.offset + i]);
           }
 
-          // If this step turns out to be a bottlneck, we can investigate
-          // using S2CellUnion::FromNormalized()
+          // If this step turns out to be a bottleneck, we can investigate
+          // using S2CellUnion::FromNormalized() and requiring the caller to
+          // explicitly normalize first.
           auto cells = S2CellUnion(std::move(cell_ids));
           auto poly = make_uniq<S2Polygon>();
           poly->InitToCellUnionBorder(cells);
