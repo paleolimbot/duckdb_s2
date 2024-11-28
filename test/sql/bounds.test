@@ -10,8 +10,23 @@ SELECT s2_covering(s2_data_country('Fiji'));
 ----
 [3/13002011, 3/1300232, 3/130030, 3/130031, 3/130033, 3/130100, 3/2032333, 3/20330000000]
 
+query I
+SELECT s2_covering_fixed_level(s2_data_country('Fiji'), 5);
+----
+[3/13002, 3/13003, 3/13010, 3/20323, 3/20330]
+
 # Check optimization for the cell center geography
 query I
 SELECT s2_covering('POINT (-64 45)'::GEOGRAPHY::S2_CELL_CENTER);
 ----
 [2/112230310012123001312232330210]
+
+query I
+SELECT s2_covering_fixed_level('POINT (-64 45)'::GEOGRAPHY::S2_CELL_CENTER, 5);
+----
+[2/11223]
+
+statement error
+SELECT s2_covering_fixed_level(geog, UNNEST([1, 2])) from s2_data_countries();
+----
+Invalid Input Error: s2_covering_fixed_level(): level must be a constant
