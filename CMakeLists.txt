@@ -189,6 +189,12 @@ set(EXTENSION_SOURCES
     src/s2_accessors.cpp
     src/s2_bounds.cpp)
 
+# Workaround for difference between v1.1.3 and main with respect to
+# FunctionEntry fields
+if(DUCKDB_VERSION STREQUAL "v1.1.3")
+  add_definitions(-DDUCKDB_FUNC_ENTRY_HAS_METADATA=1)
+endif()
+
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
 build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
 

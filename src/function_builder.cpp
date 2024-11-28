@@ -22,6 +22,8 @@ void FunctionBuilder::Register(DatabaseInstance& db, const char* name,
   }
 
   auto& func_entry = catalog_entry->Cast<FunctionEntry>();
+
+#if defined(DUCKDB_FUNC_ENTRY_HAS_METADATA)
   if (!builder.parameter_names.empty()) {
     func_entry.parameter_names = std::move(builder.parameter_names);
   }
@@ -33,7 +35,7 @@ void FunctionBuilder::Register(DatabaseInstance& db, const char* name,
   if (!builder.example.empty()) {
     func_entry.example = std::move(builder.example);
   }
-
+#endif
   if (!builder.tags.empty()) {
     func_entry.tags = std::move(builder.tags);
   }
