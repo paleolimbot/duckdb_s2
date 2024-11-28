@@ -10,8 +10,6 @@
 #include "s2_geography_serde.hpp"
 #include "s2_types.hpp"
 
-#include "function_builder.hpp"
-
 namespace duckdb {
 
 namespace duckdb_s2 {
@@ -153,7 +151,9 @@ struct S2CellUnionToGeography {
             cell_ids[i] = S2CellId(child_ids[item.offset + i]);
           }
 
-          auto cells = S2CellUnion::FromVerbatim(std::move(cell_ids));
+          // We might be able to speed up this step by using FromNormalized() or
+          // FromVerbatim(), but this is safer.
+          auto cells = S2CellUnion(std::move(cell_ids));
           auto poly = make_uniq<S2Polygon>();
           poly->InitToCellUnionBorder(cells);
           s2geography::PolygonGeography geog(std::move(poly));
@@ -171,35 +171,13 @@ struct S2CellUnionToGeography {
 // GEOSHilbertCode_r() (which helpfully does not require a previously calculated extent).
 struct S2CellCenterFromWKB {
   static void Register(DatabaseInstance& instance) {
-    FunctionBuilder::RegisterScalar(
-        instance, "s2_cellfromwkb", [](ScalarFunctionBuilder& func) {
-          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
-            variant.AddParameter("wkb", LogicalType::BLOB);
-            variant.SetReturnType(Types::S2_CELL_CENTER());
-            variant.SetFunction(ExecutePointFn);
-          });
+    auto fn = ScalarFunction("s2_cellfromwkb", {LogicalType::BLOB},
+                             Types::S2_CELL_CENTER(), ExecutePointFn);
+    ExtensionUtil::RegisterFunction(instance, fn);
 
-          func.SetDescription("Convert a WKB point directly to S2_CELL_CENTER");
-          // TODO: Example
-
-          func.SetTag("ext", "geography");
-          func.SetTag("category", "cellops");
-        });
-
-    FunctionBuilder::RegisterScalar(
-        instance, "s2_arbitrarycellfromwkb", [](ScalarFunctionBuilder& func) {
-          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
-            variant.AddParameter("wkb", LogicalType::BLOB);
-            variant.SetReturnType(Types::S2_CELL_CENTER());
-            variant.SetFunction(ExecuteArbitraryFn);
-          });
-
-          func.SetDescription("Convert the first vertex to S2_CELL_CENTER for sorting.");
-          // TODO: Example
-
-          func.SetTag("ext", "geography");
-          func.SetTag("category", "cellops");
-        });
+    auto fn_arbitrary = ScalarFunction("s2_arbitrarycellfromwkb", {LogicalType::BLOB},
+                                       Types::S2_CELL_CENTER(), ExecuteArbitraryFn);
+    ExtensionUtil::RegisterFunction(instance, fn_arbitrary);
   }
 
   static inline void ExecutePointFn(DataChunk& args, ExpressionState& state,
@@ -420,21 +398,10 @@ struct S2CellCenterFromWKB {
 
 struct S2CellCenterFromLonLat {
   static void Register(DatabaseInstance& instance) {
-    FunctionBuilder::RegisterScalar(
-        instance, "s2_cellfromlonlat", [](ScalarFunctionBuilder& func) {
-          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
-            variant.AddParameter("lon", LogicalType::DOUBLE);
-            variant.AddParameter("lat", LogicalType::DOUBLE);
-            variant.SetReturnType(Types::S2_CELL_CENTER());
-            variant.SetFunction(ExecuteFn);
-          });
-
-          func.SetDescription("Convert a lon/lat pair to S2_CELL_CENTER");
-          // TODO: Example
-
-          func.SetTag("ext", "geography");
-          func.SetTag("category", "cellops");
-        });
+    auto fn =
+        ScalarFunction("s2_cellfromlonlat", {LogicalType::DOUBLE, LogicalType::DOUBLE},
+                       Types::S2_CELL_CENTER(), ExecuteFn);
+    ExtensionUtil::RegisterFunction(instance, fn);
   }
 
   static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
@@ -522,21 +489,9 @@ struct S2CellToGeography {
 
 struct S2CellVertex {
   static void Register(DatabaseInstance& instance) {
-    FunctionBuilder::RegisterScalar(
-        instance, "s2_cell_vertex", [](ScalarFunctionBuilder& func) {
-          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
-            variant.AddParameter("cell_id", Types::S2_CELL());
-            variant.AddParameter("vertex_id", LogicalType::TINYINT);
-            variant.SetReturnType(Types::GEOGRAPHY());
-            variant.SetFunction(Execute);
-          });
-
-          func.SetDescription("Returns the vertex of the S2 cell.");
-          // TODO: Example
-
-          func.SetTag("ext", "geography");
-          func.SetTag("category", "cellops");
-        });
+    auto fn = ScalarFunction("s2_cell_vertex", {Types::S2_CELL(), LogicalType::TINYINT},
+                             Types::GEOGRAPHY(), Execute);
+    ExtensionUtil::RegisterFunction(instance, fn);
   }
 
   static inline void Execute(DataChunk& args, ExpressionState& state, Vector& result) {
@@ -557,19 +512,8 @@ struct S2CellVertex {
 template <typename Op>
 struct S2CellToString {
   static void Register(DatabaseInstance& instance, const char* name) {
-    FunctionBuilder::RegisterScalar(instance, name, [](ScalarFunctionBuilder& func) {
-      func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
-        variant.AddParameter("cell", Types::S2_CELL());
-        variant.SetReturnType(LogicalType::VARCHAR);
-        variant.SetFunction(ExecuteFn);
-      });
-
-      // TODO: Description
-      // TODO: Example
-
-      func.SetTag("ext", "geography");
-      func.SetTag("category", "cellops");
-    });
+    auto fn = ScalarFunction(name, {Types::S2_CELL()}, LogicalType::VARCHAR, ExecuteFn);
+    ExtensionUtil::RegisterFunction(instance, fn);
   }
 
   static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
@@ -595,19 +539,8 @@ struct S2CellToString {
 template <typename Op>
 struct S2CellFromString {
   static void Register(DatabaseInstance& instance, const char* name) {
-    FunctionBuilder::RegisterScalar(instance, name, [](ScalarFunctionBuilder& func) {
-      func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
-        variant.AddParameter("text", LogicalType::VARCHAR);
-        variant.SetReturnType(Types::S2_CELL());
-        variant.SetFunction(ExecuteFn);
-      });
-
-      // TODO: Description
-      // TODO: Example
-
-      func.SetTag("ext", "geography");
-      func.SetTag("category", "cellops");
-    });
+    auto fn = ScalarFunction(name, {LogicalType::VARCHAR}, Types::S2_CELL(), ExecuteFn);
+    ExtensionUtil::RegisterFunction(instance, fn);
   }
 
   static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
@@ -632,19 +565,8 @@ struct S2CellFromString {
 template <typename Op>
 struct S2CellToDouble {
   static void Register(DatabaseInstance& instance, const char* name) {
-    FunctionBuilder::RegisterScalar(instance, name, [](ScalarFunctionBuilder& func) {
-      func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
-        variant.AddParameter("cell", Types::S2_CELL());
-        variant.SetReturnType(LogicalType::DOUBLE);
-        variant.SetFunction(Execute);
-      });
-
-      // TODO: Description
-      // TODO: Example
-
-      func.SetTag("ext", "geography");
-      func.SetTag("category", "cellops");
-    });
+    auto fn = ScalarFunction(name, {Types::S2_CELL()}, LogicalType::DOUBLE, Execute);
+    ExtensionUtil::RegisterFunction(instance, fn);
   }
 
   static inline void Execute(DataChunk& args, ExpressionState& state, Vector& result) {
@@ -659,19 +581,8 @@ template <typename Op>
 struct S2CellToInt8 {
   static void Register(DatabaseInstance& instance, const char* name,
                        LogicalType arg_type) {
-    FunctionBuilder::RegisterScalar(instance, name, [&](ScalarFunctionBuilder& func) {
-      func.AddVariant([&](ScalarFunctionVariantBuilder& variant) {
-        variant.AddParameter("cell", arg_type);
-        variant.SetReturnType(LogicalType::TINYINT);
-        variant.SetFunction(Execute);
-      });
-
-      // TODO: Description
-      // TODO: Example
-
-      func.SetTag("ext", "geography");
-      func.SetTag("category", "cellops");
-    });
+    auto fn = ScalarFunction(name, {arg_type}, LogicalType::TINYINT, Execute);
+    ExtensionUtil::RegisterFunction(instance, fn);
   }
 
   static inline void Execute(DataChunk& args, ExpressionState& state, Vector& result) {
@@ -685,19 +596,9 @@ struct S2CellToInt8 {
 template <typename Op>
 struct S2BinaryCellPredicate {
   static void Register(DatabaseInstance& instance, const char* name) {
-    FunctionBuilder::RegisterScalar(instance, name, [&](ScalarFunctionBuilder& func) {
-      func.AddVariant([&](ScalarFunctionVariantBuilder& variant) {
-        variant.AddParameter("cell1", Types::S2_CELL());
-        variant.AddParameter("cell2", Types::S2_CELL());
-        variant.SetReturnType(LogicalType::BOOLEAN);
-        variant.SetFunction(Execute);
-      });
-      // TODO: Description
-      // TODO: Example
-
-      func.SetTag("ext", "geography");
-      func.SetTag("category", "cellops");
-    });
+    auto fn = ScalarFunction(name, {Types::S2_CELL(), Types::S2_CELL()},
+                             LogicalType::BOOLEAN, Execute);
+    ExtensionUtil::RegisterFunction(instance, fn);
   }
 
   static inline void Execute(DataChunk& args, ExpressionState& state, Vector& result) {
@@ -711,20 +612,9 @@ struct S2BinaryCellPredicate {
 template <typename Op>
 struct S2CellToCell {
   static void Register(DatabaseInstance& instance, const char* name) {
-    FunctionBuilder::RegisterScalar(instance, name, [&](ScalarFunctionBuilder& func) {
-      func.AddVariant([&](ScalarFunctionVariantBuilder& variant) {
-        variant.AddParameter("cell", Types::S2_CELL());
-        variant.AddParameter("index", LogicalType::TINYINT);
-        variant.SetReturnType(Types::S2_CELL());
-        variant.SetFunction(Execute);
-      });
-
-      // TODO: Description
-      // TODO: Example
-
-      func.SetTag("ext", "geography");
-      func.SetTag("category", "cellops");
-    });
+    auto fn = ScalarFunction(name, {Types::S2_CELL(), LogicalType::TINYINT},
+                             Types::S2_CELL(), Execute);
+    ExtensionUtil::RegisterFunction(instance, fn);
   }
 
   static inline void Execute(DataChunk& args, ExpressionState& state, Vector& result) {
