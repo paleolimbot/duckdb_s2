@@ -22,3 +22,6 @@ python duckdoc.py \
     --output function-reference.md \
     --run-examples
 ```
+
+This will update the rendered documentation (which is currently just checked in
+as a `function-reference.md` in this directory).
