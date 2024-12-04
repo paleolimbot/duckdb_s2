@@ -19,7 +19,7 @@
 
 ```sql
 {% for sig in function.signatures -%}
-{{ sig.return_type }} {{ function.name }}(
+{{ sig.return }} {{ function.name }}(
 {%- for arg in sig.params -%}
     {%- if loop.index > 1 %}, {% endif -%}
     {{ arg.name }} {{ arg.type }}
