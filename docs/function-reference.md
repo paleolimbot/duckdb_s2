@@ -3,12 +3,12 @@
 
 | Function | Summary |
 | --- | --- |
-| [`s2_area`](#s2_area) | Returns the area of the geography.|
+| [`s2_area`](#s2_area) | |
 | [`s2_isempty`](#s2_isempty) | Returns true if the geography is empty.|
-| [`s2_length`](#s2_length) | Returns the length of the geography.|
-| [`s2_perimeter`](#s2_perimeter) | Returns the perimeter of the geography.|
-| [`s2_x`](#s2_x) | Returns the x coordinate of the geography.|
-| [`s2_y`](#s2_y) | Returns the y coordinate of the geography.|
+| [`s2_length`](#s2_length) | |
+| [`s2_perimeter`](#s2_perimeter) | |
+| [`s2_x`](#s2_x) | |
+| [`s2_y`](#s2_y) | |
 | [`s2_covering`](#s2_covering) | Returns the S2 cell covering of the geography.|
 | [`s2_covering_fixed_level`](#s2_covering_fixed_level) | Returns the S2 cell covering of the geography with a fixed level.|
 | [`s2_arbitrarycellfromwkb`](#s2_arbitrarycellfromwkb) | Convert the first vertex to S2_CELL_CENTER for sorting.|
@@ -47,12 +47,40 @@
 
 ### s2_area
 
-Returns the area of the geography.
+
 
 ```sql
 DOUBLE s2_area(geog GEOGRAPHY)
 ```
 
+#### Description
+
+Calculate the area of the geography in square meters.
+
+The returned area is in square meters as approximated as the area of the polygon
+on a perfect sphere.
+
+For non-polygon geographies, `s2_area()` returns `0.0`.
+
+#### Example
+
+```sql
+SELECT s2_area(s2_data_country('Fiji')) AS area;
+--┌───────────────────┐
+--│       area        │
+--│      double       │
+--├───────────────────┤
+--│ 19353593807.95006 │
+--└───────────────────┘
+
+SELECT s2_area('POINT (0 0)'::GEOGRAPHY) AS area;
+--┌────────┐
+--│  area  │
+--│ double │
+--├────────┤
+--│    0.0 │
+--└────────┘
+```
 
 ### s2_isempty
 
@@ -77,39 +105,136 @@ SELECT s2_isempty('POINT(0 0)') AS is_empty;
 
 ### s2_length
 
-Returns the length of the geography.
+
 
 ```sql
 DOUBLE s2_length(geog GEOGRAPHY)
 ```
 
+#### Description
+
+Calculate the length of the geography in meters.
+
+For non-linestring or multilinestring geographies, `s2_length()` returns `0.0`.
+
+#### Example
+
+```sql
+SELECT s2_length('POINT (0 0)'::GEOGRAPHY) AS length;
+--┌────────┐
+--│ length │
+--│ double │
+--├────────┤
+--│    0.0 │
+--└────────┘
+
+SELECT s2_length('LINESTRING (0 0, -64 45)'::GEOGRAPHY) AS length;
+--┌───────────────────┐
+--│      length       │
+--│      double       │
+--├───────────────────┤
+--│ 7999627.260862333 │
+--└───────────────────┘
+
+SELECT s2_length(s2_data_country('Canada')) AS length;
+--┌────────┐
+--│ length │
+--│ double │
+--├────────┤
+--│    0.0 │
+--└────────┘
+```
 
 ### s2_perimeter
 
-Returns the perimeter of the geography.
+
 
 ```sql
 DOUBLE s2_perimeter(geog GEOGRAPHY)
 ```
 
+#### Description
+
+Calculate the perimeter of the geography in meters.
+
+The returned length is in meters as approximated as the perimeter of the polygon
+on a perfect sphere.
+
+For non-polygon geographies, `s2_perimeter()` returns `0.0`. For a  polygon with
+more than one ring, this function returns the sum of the perimeter of all
+rings.
+
+#### Example
+
+```sql
+SELECT s2_perimeter(s2_data_country('Fiji')) AS perimeter;
+--┌───────────────────┐
+--│     perimeter     │
+--│      double       │
+--├───────────────────┤
+--│ 865355.9056990512 │
+--└───────────────────┘
+
+SELECT s2_perimeter('POINT (0 0)'::GEOGRAPHY) AS perimeter;
+--┌───────────┐
+--│ perimeter │
+--│  double   │
+--├───────────┤
+--│       0.0 │
+--└───────────┘
+```
 
 ### s2_x
 
-Returns the x coordinate of the geography.
+
 
 ```sql
 DOUBLE s2_x(geog GEOGRAPHY)
 ```
 
+#### Description
+
+Extract the longitude of a point geography.
+
+For geographies that are not a single point, `NaN` is returned.
+
+#### Example
+
+```sql
+SELECT s2_x('POINT (-64 45)'::GEOGRAPHY);
+--┌───────────────────────────────────────────┐
+--│ s2_x(CAST('POINT (-64 45)' AS GEOGRAPHY)) │
+--│                  double                   │
+--├───────────────────────────────────────────┤
+--│                                     -64.0 │
+--└───────────────────────────────────────────┘
+```
 
 ### s2_y
 
-Returns the y coordinate of the geography.
+
 
 ```sql
 DOUBLE s2_y(geog GEOGRAPHY)
 ```
 
+#### Description
+
+Extract the latitude of a point geography.
+
+For geographies that are not a single point, `NaN` is returned.
+
+#### Example
+
+```sql
+SELECT s2_y('POINT (-64 45)'::GEOGRAPHY);
+--┌───────────────────────────────────────────┐
+--│ s2_y(CAST('POINT (-64 45)' AS GEOGRAPHY)) │
+--│                  double                   │
+--├───────────────────────────────────────────┤
+--│                         44.99999999999999 │
+--└───────────────────────────────────────────┘
+```
 ## Bounds
 
 
