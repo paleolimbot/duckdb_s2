@@ -5,17 +5,14 @@
 | --- | --- |
 {% for category in categories -%}
 {% for function in category.functions -%}
-| {{ function.name }} | {{ function.summary }}|
-
+    | [`{{ function.name }}`](#{{ function.name }}) | {{ function.summary }}|
 {%- endfor %}
 {%- endfor %}
 
 {% for category in categories %}
-
-## {{ category.name | title }}
+## {{ category.name | replace('-', ' ') | title }}
 
 {% for function in category.functions %}
-
 ### {{ function.name }}
 
 {{ function.summary }}
@@ -23,23 +20,28 @@
 #### Signature
 
 ```sql
-{{ function.signature }}
+{% for sig in function.signatures -%}
+{{ sig.return_type }} {{ function.name }}(
+{%- for arg in sig.params -%}
+    {%- if loop.index > 1 -%}, {%- endif -%}
+    {{ arg.name }} {{ arg.type }}
+{%- endfor -%}
+)
+{% endfor -%}
 ```
 
-{% if function.description %}
+{% if function.description -%}
 #### Description
 
 {{ function.description }}
-{% endif %}
+{% endif -%}
 
-{% if function.example %}
+{%- if function.example -%}
 #### Example
 
 ```sql
 {{ function.example }}
 ```
-{% endif %}
-
-{% endfor %}
-
-{% endfor %}
+{%- endif -%}
+{%- endfor -%}
+{%- endfor -%}
