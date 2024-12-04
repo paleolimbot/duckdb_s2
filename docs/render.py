@@ -6,7 +6,7 @@ from jinja2 import Environment, FileSystemLoader
 functions = [
     {
         "name": "s2_data_city",
-        "summary": "Return a city from the example data or error if no such city exists",
+        "summary": "Return a city from the example data or error if no such city exists.",
         "signatures": [
             {"return_type": "GEOGRAPHY", "params": []},
             {
@@ -22,7 +22,26 @@ functions = [
             },
         ],
         "category": "example-data",
-    }
+    },
+    {
+        "name": "s2_data_country",
+        "summary": "Return a country from the example data or error if no such country exists.",
+        "signatures": [
+            {"return_type": "GEOGRAPHY", "params": [{"name": "country", "type": "VARCHAR"}]},
+        ],
+        "category": "example-data",
+    },
+    {
+        "name": "s2_x",
+        "summary": "Return the longitude of a point geography or NaN if none exist.s",
+        "signatures": [
+            {
+                "return_type": "DOUBLE",
+                "params": [{"name": "geog", "type": "GEOGRAPHY"}],
+            },
+        ],
+        "category": "accessors",
+    },
 ]
 
 category_names = set(fun["category"] for fun in functions)

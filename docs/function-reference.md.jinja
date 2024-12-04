@@ -6,7 +6,7 @@
 {% for category in categories -%}
 {% for function in category.functions -%}
     | [`{{ function.name }}`](#{{ function.name }}) | {{ function.summary }}|
-{%- endfor %}
+{% endfor %}
 {%- endfor %}
 
 {% for category in categories %}
@@ -23,7 +23,7 @@
 {% for sig in function.signatures -%}
 {{ sig.return_type }} {{ function.name }}(
 {%- for arg in sig.params -%}
-    {%- if loop.index > 1 -%}, {%- endif -%}
+    {%- if loop.index > 1 %}, {% endif -%}
     {{ arg.name }} {{ arg.type }}
 {%- endfor -%}
 )
