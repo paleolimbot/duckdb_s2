@@ -285,6 +285,14 @@ See `[s2_covering](#s2_covering)` for further detail and examples.
 #### Example
 
 ```sql
+SELECT s2_covering_fixed_level(s2_data_country('Germany'), 3) AS covering;
+--┌────────────────┐
+--│    covering    │
+--│ s2_cell_union  │
+--├────────────────┤
+--│ [2/032, 2/033] │
+--└────────────────┘
+
 SELECT s2_covering_fixed_level(s2_data_country('Germany'), 4) AS covering;
 --┌──────────────────────────────────────────┐
 --│                 covering                 │
@@ -292,14 +300,6 @@ SELECT s2_covering_fixed_level(s2_data_country('Germany'), 4) AS covering;
 --├──────────────────────────────────────────┤
 --│ [2/0320, 2/0323, 2/0330, 2/0331, 2/0332] │
 --└──────────────────────────────────────────┘
-
-SELECT s2_covering_fixed_level(s2_data_country('Germany'), 5) AS covering;
---┌────────────────────────────────────────────────────────────────────────────────────────────┐
---│                                          covering                                          │
---│                                       s2_cell_union                                        │
---├────────────────────────────────────────────────────────────────────────────────────────────┤
---│ [2/03200, 2/03201, 2/03232, 2/03302, 2/03303, 2/03310, 2/03311, 2/03312, 2/03313, 2/03320] │
---└────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 ## Cellops
 
@@ -469,12 +469,42 @@ Returns the difference of two geographies.
 GEOGRAPHY s2_difference(geog1 GEOGRAPHY, geog2 GEOGRAPHY)
 ```
 
+#### Example
+
+```sql
+SELECT s2_difference(
+  'POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))',
+  'POLYGON ((5 5, 15 5, 15 15, 5 15, 5 5))'
+) as difference
+--┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+--│                                                      difference                                                      │
+--│                                                      geography                                                       │
+--├──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+--│ POLYGON ((5.000000000000001 10.037423045910714, 0 10, 0 0, 10 0, 9.999999999999998 5.019001817489642, 4.9999999999…  │
+--└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
 ### s2_intersection
 
 Returns the intersection of two geographies.
 
 ```sql
 GEOGRAPHY s2_intersection(geog1 GEOGRAPHY, geog2 GEOGRAPHY)
+```
+
+#### Example
+
+```sql
+SELECT s2_intersection(
+  'POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))',
+  'POLYGON ((5 5, 15 5, 15 15, 5 15, 5 5))'
+) as intersection
+--┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+--│                                                     intersection                                                     │
+--│                                                      geography                                                       │
+--├──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+--│ POLYGON ((4.999999999999999 4.999999999999999, 9.999999999999998 5.019001817489642, 10 10.000000000000002, 5.00000…  │
+--└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### s2_union
@@ -485,7 +515,21 @@ Returns the union of two geographies.
 GEOGRAPHY s2_union(geog1 GEOGRAPHY, geog2 GEOGRAPHY)
 ```
 
-## Predicate
+#### Example
+
+```sql
+SELECT s2_union(
+  'POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))',
+  'POLYGON ((5 5, 15 5, 15 15, 5 15, 5 5))'
+) as union_
+--┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+--│                                                        union_                                                        │
+--│                                                      geography                                                       │
+--├──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+--│ POLYGON ((5.000000000000001 10.037423045910714, 0 10, 0 0, 10 0, 9.999999999999998 5.019001817489642, 14.999999999…  │
+--└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+## Predicates
 
 ### s2_contains
 
@@ -493,6 +537,34 @@ Returns true if the first geography contains the second.
 
 ```sql
 BOOLEAN s2_contains(geog1 GEOGRAPHY, geog2 GEOGRAPHY)
+```
+
+#### Example
+
+```sql
+SELECT s2_contains(s2_data_country('Canada'), s2_data_city('Toronto'));
+--┌─────────────────────────────────────────────────────────────────┐
+--│ s2_contains(s2_data_country('Canada'), s2_data_city('Toronto')) │
+--│                             boolean                             │
+--├─────────────────────────────────────────────────────────────────┤
+--│ true                                                            │
+--└─────────────────────────────────────────────────────────────────┘
+
+SELECT s2_contains(s2_data_city('Toronto'), s2_data_country('Canada'));
+--┌─────────────────────────────────────────────────────────────────┐
+--│ s2_contains(s2_data_city('Toronto'), s2_data_country('Canada')) │
+--│                             boolean                             │
+--├─────────────────────────────────────────────────────────────────┤
+--│ false                                                           │
+--└─────────────────────────────────────────────────────────────────┘
+
+SELECT s2_contains(s2_data_country('Canada'), s2_data_city('Chicago'));
+--┌─────────────────────────────────────────────────────────────────┐
+--│ s2_contains(s2_data_country('Canada'), s2_data_city('Chicago')) │
+--│                             boolean                             │
+--├─────────────────────────────────────────────────────────────────┤
+--│ false                                                           │
+--└─────────────────────────────────────────────────────────────────┘
 ```
 
 ### s2_equals
@@ -503,6 +575,31 @@ Returns true if the two geographies are equal.
 BOOLEAN s2_equals(geog1 GEOGRAPHY, geog2 GEOGRAPHY)
 ```
 
+#### Description
+
+Note that this test of equality will pass for *geometrically* equal geographies
+that may have the same edges but that are ordered differently.
+
+#### Example
+
+```sql
+SELECT s2_equals(s2_data_country('Canada'), s2_data_country('Canada'));
+--┌─────────────────────────────────────────────────────────────────┐
+--│ s2_equals(s2_data_country('Canada'), s2_data_country('Canada')) │
+--│                             boolean                             │
+--├─────────────────────────────────────────────────────────────────┤
+--│ true                                                            │
+--└─────────────────────────────────────────────────────────────────┘
+
+SELECT s2_equals(s2_data_city('Toronto'), s2_data_country('Canada'));
+--┌───────────────────────────────────────────────────────────────┐
+--│ s2_equals(s2_data_city('Toronto'), s2_data_country('Canada')) │
+--│                            boolean                            │
+--├───────────────────────────────────────────────────────────────┤
+--│ false                                                         │
+--└───────────────────────────────────────────────────────────────┘
+```
+
 ### s2_intersects
 
 Returns true if the two geographies intersect.
@@ -511,10 +608,66 @@ Returns true if the two geographies intersect.
 BOOLEAN s2_intersects(geog1 GEOGRAPHY, geog2 GEOGRAPHY)
 ```
 
+#### Example
+
+```sql
+SELECT s2_intersects(s2_data_country('Canada'), s2_data_city('Toronto'));
+--┌───────────────────────────────────────────────────────────────────┐
+--│ s2_intersects(s2_data_country('Canada'), s2_data_city('Toronto')) │
+--│                              boolean                              │
+--├───────────────────────────────────────────────────────────────────┤
+--│ true                                                              │
+--└───────────────────────────────────────────────────────────────────┘
+
+SELECT s2_intersects(s2_data_country('Canada'), s2_data_city('Chicago'));
+--┌───────────────────────────────────────────────────────────────────┐
+--│ s2_intersects(s2_data_country('Canada'), s2_data_city('Chicago')) │
+--│                              boolean                              │
+--├───────────────────────────────────────────────────────────────────┤
+--│ false                                                             │
+--└───────────────────────────────────────────────────────────────────┘
+```
+
 ### s2_mayintersect
 
 Returns true if the two geographies may intersect.
 
 ```sql
 BOOLEAN s2_mayintersect(geog1 GEOGRAPHY, geog2 GEOGRAPHY)
+```
+
+#### Description
+
+This function uses the internal [covering](#s2_covering) stored alongside
+each geography to perform a cheap check for potential intersection.
+
+#### Example
+
+```sql
+-- Definitely intersects
+SELECT s2_mayintersect(s2_data_country('Canada'), s2_data_city('Toronto'));
+--┌─────────────────────────────────────────────────────────────────────┐
+--│ s2_mayintersect(s2_data_country('Canada'), s2_data_city('Toronto')) │
+--│                               boolean                               │
+--├─────────────────────────────────────────────────────────────────────┤
+--│ true                                                                │
+--└─────────────────────────────────────────────────────────────────────┘
+
+-- Doesn't intersect but might according to the internal coverings
+SELECT s2_mayintersect(s2_data_country('Canada'), s2_data_city('Chicago'));
+--┌─────────────────────────────────────────────────────────────────────┐
+--│ s2_mayintersect(s2_data_country('Canada'), s2_data_city('Chicago')) │
+--│                               boolean                               │
+--├─────────────────────────────────────────────────────────────────────┤
+--│ true                                                                │
+--└─────────────────────────────────────────────────────────────────────┘
+
+-- Definitely doesn't intersect
+SELECT s2_mayintersect(s2_data_country('Canada'), s2_data_city('Berlin'));
+--┌────────────────────────────────────────────────────────────────────┐
+--│ s2_mayintersect(s2_data_country('Canada'), s2_data_city('Berlin')) │
+--│                              boolean                               │
+--├────────────────────────────────────────────────────────────────────┤
+--│ true                                                               │
+--└────────────────────────────────────────────────────────────────────┘
 ```

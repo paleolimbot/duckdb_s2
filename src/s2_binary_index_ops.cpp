@@ -28,11 +28,26 @@ struct S2BinaryIndexOp {
             variant.SetFunction(ExecuteMayIntersectFn);
           });
 
-          func.SetDescription("Returns true if the two geographies may intersect.");
-          // TODO: Example
+          func.SetDescription(R"(
+Returns true if the two geographies may intersect.
+
+This function uses the internal [covering](#s2_covering) stored alongside
+each geography to perform a cheap check for potential intersection.
+)");
+
+          func.SetExample(R"(
+-- Definitely intersects
+SELECT s2_mayintersect(s2_data_country('Canada'), s2_data_city('Toronto'));
+----
+-- Doesn't intersect but might according to the internal coverings
+SELECT s2_mayintersect(s2_data_country('Canada'), s2_data_city('Chicago'));
+----
+-- Definitely doesn't intersect
+SELECT s2_mayintersect(s2_data_country('Canada'), s2_data_city('Berlin'));
+)");
 
           func.SetTag("ext", "geography");
-          func.SetTag("category", "predicate");
+          func.SetTag("category", "predicates");
         });
 
     FunctionBuilder::RegisterScalar(
@@ -44,11 +59,18 @@ struct S2BinaryIndexOp {
             variant.SetFunction(ExecuteIntersectsFn);
           });
 
-          func.SetDescription("Returns true if the two geographies intersect.");
-          // TODO: Example
+          func.SetDescription(R"(
+Returns true if the two geographies intersect.
+)");
+
+          func.SetExample(R"(
+SELECT s2_intersects(s2_data_country('Canada'), s2_data_city('Toronto'));
+----
+SELECT s2_intersects(s2_data_country('Canada'), s2_data_city('Chicago'));
+)");
 
           func.SetTag("ext", "geography");
-          func.SetTag("category", "predicate");
+          func.SetTag("category", "predicates");
         });
 
     FunctionBuilder::RegisterScalar(
@@ -60,11 +82,20 @@ struct S2BinaryIndexOp {
             variant.SetFunction(ExecuteContainsFn);
           });
 
-          func.SetDescription("Returns true if the first geography contains the second.");
-          // TODO: Example
+          func.SetDescription(R"(
+Returns true if the first geography contains the second.
+)");
+
+          func.SetExample(R"(
+SELECT s2_contains(s2_data_country('Canada'), s2_data_city('Toronto'));
+----
+SELECT s2_contains(s2_data_city('Toronto'), s2_data_country('Canada'));
+----
+SELECT s2_contains(s2_data_country('Canada'), s2_data_city('Chicago'));
+)");
 
           func.SetTag("ext", "geography");
-          func.SetTag("category", "predicate");
+          func.SetTag("category", "predicates");
         });
 
     FunctionBuilder::RegisterScalar(
@@ -76,11 +107,20 @@ struct S2BinaryIndexOp {
             variant.SetFunction(ExecuteEqualsFn);
           });
 
-          func.SetDescription("Returns true if the two geographies are equal.");
-          // TODO: Example
+          func.SetDescription(R"(
+Returns true if the two geographies are equal.
+
+Note that this test of equality will pass for *geometrically* equal geographies
+that may have the same edges but that are ordered differently.
+)");
+          func.SetExample(R"(
+SELECT s2_equals(s2_data_country('Canada'), s2_data_country('Canada'));
+----
+SELECT s2_equals(s2_data_city('Toronto'), s2_data_country('Canada'));
+)");
 
           func.SetTag("ext", "geography");
-          func.SetTag("category", "predicate");
+          func.SetTag("category", "predicates");
         });
 
     FunctionBuilder::RegisterScalar(
@@ -92,8 +132,16 @@ struct S2BinaryIndexOp {
             variant.SetFunction(ExecuteIntersectionFn);
           });
 
-          func.SetDescription("Returns the intersection of two geographies.");
-          // TODO: Example
+          func.SetDescription(R"(
+Returns the intersection of two geographies.
+)");
+
+          func.SetExample(R"(
+SELECT s2_intersection(
+  'POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))',
+  'POLYGON ((5 5, 15 5, 15 15, 5 15, 5 5))'
+) as intersection
+)");
 
           func.SetTag("ext", "geography");
           func.SetTag("category", "overlay");
@@ -108,8 +156,16 @@ struct S2BinaryIndexOp {
             variant.SetFunction(ExecuteDifferenceFn);
           });
 
-          func.SetDescription("Returns the difference of two geographies.");
-          // TODO: Example
+          func.SetDescription(R"(
+Returns the difference of two geographies.
+)");
+
+          func.SetExample(R"(
+SELECT s2_difference(
+  'POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))',
+  'POLYGON ((5 5, 15 5, 15 15, 5 15, 5 5))'
+) as difference
+)");
 
           func.SetTag("ext", "geography");
           func.SetTag("category", "overlay");
@@ -124,8 +180,16 @@ struct S2BinaryIndexOp {
             variant.SetFunction(ExecuteUnionFn);
           });
 
-          func.SetDescription("Returns the union of two geographies.");
-          // TODO: Example
+          func.SetDescription(R"(
+Returns the union of two geographies.
+)");
+
+          func.SetExample(R"(
+SELECT s2_union(
+  'POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))',
+  'POLYGON ((5 5, 15 5, 15 15, 5 15, 5 5))'
+) as union_
+)");
 
           func.SetTag("ext", "geography");
           func.SetTag("category", "overlay");
