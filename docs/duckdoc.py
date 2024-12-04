@@ -1,6 +1,6 @@
 import json
 import subprocess
-import textwrap
+import re
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
@@ -25,8 +25,14 @@ def render_all(context, output_path):
     env = Environment(loader=FileSystemLoader(this_dir))
 
     template = env.get_template("function-reference.md.jinja")
+    content = template.render(context)
+
+    # Canonicalize multiple newlines
+    content = re.sub("\n\n+", "\n\n", content)
+    content = re.sub("\n+$", "\n", content, flags=re.MULTILINE)
+
     with open(output_path, "w") as out:
-        out.write(template.render(context))
+        out.write(content)
 
 
 def generate_context(functions):
@@ -50,7 +56,7 @@ def parse_functions(functions):
             func["category"] = "-".join(["other", func["type"], "functions"])
 
         if "description" in func and func["description"]:
-            desc_lines = func["description"].splitlines()
+            desc_lines = func["description"].strip().splitlines()
             func["summary"] = desc_lines[0]
             func["description"] = "\n".join(desc_lines[1:])
 

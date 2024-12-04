@@ -3,12 +3,12 @@
 
 | Function | Summary |
 | --- | --- |
-| [`s2_area`](#s2_area) | |
+| [`s2_area`](#s2_area) | Calculate the area of the geography in square meters.|
 | [`s2_isempty`](#s2_isempty) | Returns true if the geography is empty.|
-| [`s2_length`](#s2_length) | |
-| [`s2_perimeter`](#s2_perimeter) | |
-| [`s2_x`](#s2_x) | |
-| [`s2_y`](#s2_y) | |
+| [`s2_length`](#s2_length) | Calculate the length of the geography in meters.|
+| [`s2_perimeter`](#s2_perimeter) | Calculate the perimeter of the geography in meters.|
+| [`s2_x`](#s2_x) | Extract the longitude of a point geography.|
+| [`s2_y`](#s2_y) | Extract the latitude of a point geography.|
 | [`s2_covering`](#s2_covering) | Returns the S2 cell covering of the geography.|
 | [`s2_covering_fixed_level`](#s2_covering_fixed_level) | Returns the S2 cell covering of the geography with a fixed level.|
 | [`s2_arbitrarycellfromwkb`](#s2_arbitrarycellfromwkb) | Convert the first vertex to S2_CELL_CENTER for sorting.|
@@ -41,21 +41,17 @@
 | [`s2_intersects`](#s2_intersects) | Returns true if the two geographies intersect.|
 | [`s2_mayintersect`](#s2_mayintersect) | Returns true if the two geographies may intersect.|
 
-
 ## Accessors
-
 
 ### s2_area
 
-
+Calculate the area of the geography in square meters.
 
 ```sql
 DOUBLE s2_area(geog GEOGRAPHY)
 ```
 
 #### Description
-
-Calculate the area of the geography in square meters.
 
 The returned area is in square meters as approximated as the area of the polygon
 on a perfect sphere.
@@ -90,7 +86,6 @@ Returns true if the geography is empty.
 BOOLEAN s2_isempty(geog GEOGRAPHY)
 ```
 
-
 #### Example
 
 ```sql
@@ -105,15 +100,13 @@ SELECT s2_isempty('POINT(0 0)') AS is_empty;
 
 ### s2_length
 
-
+Calculate the length of the geography in meters.
 
 ```sql
 DOUBLE s2_length(geog GEOGRAPHY)
 ```
 
 #### Description
-
-Calculate the length of the geography in meters.
 
 For non-linestring or multilinestring geographies, `s2_length()` returns `0.0`.
 
@@ -147,15 +140,13 @@ SELECT s2_length(s2_data_country('Canada')) AS length;
 
 ### s2_perimeter
 
-
+Calculate the perimeter of the geography in meters.
 
 ```sql
 DOUBLE s2_perimeter(geog GEOGRAPHY)
 ```
 
 #### Description
-
-Calculate the perimeter of the geography in meters.
 
 The returned length is in meters as approximated as the perimeter of the polygon
 on a perfect sphere.
@@ -186,15 +177,13 @@ SELECT s2_perimeter('POINT (0 0)'::GEOGRAPHY) AS perimeter;
 
 ### s2_x
 
-
+Extract the longitude of a point geography.
 
 ```sql
 DOUBLE s2_x(geog GEOGRAPHY)
 ```
 
 #### Description
-
-Extract the longitude of a point geography.
 
 For geographies that are not a single point, `NaN` is returned.
 
@@ -212,15 +201,13 @@ SELECT s2_x('POINT (-64 45)'::GEOGRAPHY);
 
 ### s2_y
 
-
+Extract the latitude of a point geography.
 
 ```sql
 DOUBLE s2_y(geog GEOGRAPHY)
 ```
 
 #### Description
-
-Extract the latitude of a point geography.
 
 For geographies that are not a single point, `NaN` is returned.
 
@@ -237,7 +224,6 @@ SELECT s2_y('POINT (-64 45)'::GEOGRAPHY);
 ```
 ## Bounds
 
-
 ### s2_covering
 
 Returns the S2 cell covering of the geography.
@@ -246,17 +232,42 @@ Returns the S2 cell covering of the geography.
 S2_CELL_UNION s2_covering(geog GEOGRAPHY)
 ```
 
+#### Description
+
+A covering is a deterministic S2_CELL_UNION (i.e., list of S2_CELLs) that
+completely covers a geography. This is useful as a compact approximation
+of a geography that can be used to select possible candidates for intersection.
+
+Note that an S2_CELL_UNION is a thin wrapper around a LIST of S2_CELL, such
+that DuckDB LIST functions can be used to unnest, extract, or otherwise
+interact with the result.
+
+See the [Cell Operators](#cellops) section for ways to interact with cells.
 
 #### Example
 
 ```sql
-SELECT s2_covering('POINT(0 0)') AS covering;
---┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
---│                                                       covering                                                       │
---│                                                    s2_cell_union                                                     │
---├──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
---│ [0/022222222222222222222222222222, 0/133333333333333333333333333333, 0/200000000000000000000000000000, 0/311111111…  │
---└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+SELECT s2_covering(s2_data_country('Germany')) AS covering;
+--┌────────────────────────────────────────────────────────────────────────────┐
+--│                                  covering                                  │
+--│                               s2_cell_union                                │
+--├────────────────────────────────────────────────────────────────────────────┤
+--│ [2/032003, 2/03201, 2/032322, 2/032323, 2/03302, 2/03303, 2/0331, 2/03320] │
+--└────────────────────────────────────────────────────────────────────────────┘
+
+-- Find countries that might contain Berlin
+SELECT name as country, cell FROM (
+  SELECT name, UNNEST(s2_covering(geog)) as cell
+  FROM s2_data_countries()
+) WHERE
+s2_cell_contains(cell, s2_data_city('Berlin')::S2_CELL_CENTER::S2_CELL);
+--┌─────────┬─────────┐
+--│ country │  cell   │
+--│ varchar │ s2_cell │
+--├─────────┼─────────┤
+--│ Germany │  2/0331 │
+--│ France  │   2/033 │
+--└─────────┴─────────┘
 ```
 
 ### s2_covering_fixed_level
@@ -267,28 +278,30 @@ Returns the S2 cell covering of the geography with a fixed level.
 S2_CELL_UNION s2_covering_fixed_level(geog GEOGRAPHY, fixed_level INTEGER)
 ```
 
+#### Description
+
+See `[s2_covering](#s2_covering)` for further detail and examples.
 
 #### Example
 
 ```sql
-SELECT s2_covering_fixed_level('POINT(0 0)', 4) AS covering;
---┌──────────────────────────────────┐
---│             covering             │
---│          s2_cell_union           │
---├──────────────────────────────────┤
---│ [0/0222, 0/1333, 0/2000, 0/3111] │
---└──────────────────────────────────┘
+SELECT s2_covering_fixed_level(s2_data_country('Germany'), 4) AS covering;
+--┌──────────────────────────────────────────┐
+--│                 covering                 │
+--│              s2_cell_union               │
+--├──────────────────────────────────────────┤
+--│ [2/0320, 2/0323, 2/0330, 2/0331, 2/0332] │
+--└──────────────────────────────────────────┘
 
-SELECT s2_covering_fixed_level('POINT(0 0)', 5) AS covering;
---┌──────────────────────────────────────┐
---│               covering               │
---│            s2_cell_union             │
---├──────────────────────────────────────┤
---│ [0/02222, 0/13333, 0/20000, 0/31111] │
---└──────────────────────────────────────┘
+SELECT s2_covering_fixed_level(s2_data_country('Germany'), 5) AS covering;
+--┌────────────────────────────────────────────────────────────────────────────────────────────┐
+--│                                          covering                                          │
+--│                                       s2_cell_union                                        │
+--├────────────────────────────────────────────────────────────────────────────────────────────┤
+--│ [2/03200, 2/03201, 2/03232, 2/03302, 2/03303, 2/03310, 2/03311, 2/03312, 2/03313, 2/03320] │
+--└────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 ## Cellops
-
 
 ### s2_arbitrarycellfromwkb
 
@@ -298,96 +311,65 @@ Convert the first vertex to S2_CELL_CENTER for sorting.
 S2_CELL_CENTER s2_arbitrarycellfromwkb(wkb BLOB)
 ```
 
-
 ### s2_cell_child
-
-
 
 ```sql
 S2_CELL s2_cell_child(cell S2_CELL, index TINYINT)
 ```
 
-
 ### s2_cell_contains
-
-
 
 ```sql
 BOOLEAN s2_cell_contains(cell1 S2_CELL, cell2 S2_CELL)
 ```
 
-
 ### s2_cell_edge_neighbor
-
-
 
 ```sql
 S2_CELL s2_cell_edge_neighbor(cell S2_CELL, index TINYINT)
 ```
 
-
 ### s2_cell_from_token
-
-
 
 ```sql
 S2_CELL s2_cell_from_token(text VARCHAR)
 ```
 
-
 ### s2_cell_intersects
-
-
 
 ```sql
 BOOLEAN s2_cell_intersects(cell1 S2_CELL, cell2 S2_CELL)
 ```
 
-
 ### s2_cell_level
-
-
 
 ```sql
 TINYINT s2_cell_level(cell S2_CELL)
 ```
 
-
 ### s2_cell_parent
-
-
 
 ```sql
 S2_CELL s2_cell_parent(cell S2_CELL, index TINYINT)
 ```
 
-
 ### s2_cell_range_max
-
-
 
 ```sql
 S2_CELL s2_cell_range_max(cell S2_CELL)
 ```
 
-
 ### s2_cell_range_min
-
-
 
 ```sql
 S2_CELL s2_cell_range_min(cell S2_CELL)
 ```
 
-
 ### s2_cell_token
-
-
 
 ```sql
 VARCHAR s2_cell_token(cell S2_CELL)
 ```
-
 
 ### s2_cell_vertex
 
@@ -397,7 +379,6 @@ Returns the vertex of the S2 cell.
 GEOGRAPHY s2_cell_vertex(cell_id S2_CELL, vertex_id TINYINT)
 ```
 
-
 ### s2_cellfromlonlat
 
 Convert a lon/lat pair to S2_CELL_CENTER
@@ -405,7 +386,6 @@ Convert a lon/lat pair to S2_CELL_CENTER
 ```sql
 S2_CELL_CENTER s2_cellfromlonlat(lon DOUBLE, lat DOUBLE)
 ```
-
 
 ### s2_cellfromwkb
 
@@ -417,7 +397,6 @@ S2_CELL_CENTER s2_cellfromwkb(wkb BLOB)
 
 ## Conversion
 
-
 ### s2_astext
 
 Returns the WKT string of the geography.
@@ -425,7 +404,6 @@ Returns the WKT string of the geography.
 ```sql
 VARCHAR s2_astext(geog GEOGRAPHY)
 ```
-
 
 ### s2_aswkb
 
@@ -435,7 +413,6 @@ Returns the WKB blob of the geography.
 BLOB s2_aswkb(geog GEOGRAPHY)
 ```
 
-
 ### s2_format
 
 Returns the WKT string of the geography with a given precision.
@@ -443,7 +420,6 @@ Returns the WKT string of the geography with a given precision.
 ```sql
 VARCHAR s2_format(geog GEOGRAPHY, precision TINYINT)
 ```
-
 
 ### s2_geogfromtext
 
@@ -453,7 +429,6 @@ Returns the geography from a WKT string.
 GEOGRAPHY s2_geogfromtext(wkt VARCHAR)
 ```
 
-
 ### s2_geogfromwkb
 
 Converts a WKB blob to a geography.
@@ -461,7 +436,6 @@ Converts a WKB blob to a geography.
 ```sql
 GEOGRAPHY s2_geogfromwkb(wkb BLOB)
 ```
-
 
 ### s2_prepare
 
@@ -473,26 +447,19 @@ GEOGRAPHY s2_prepare(geog GEOGRAPHY)
 
 ## Data
 
-
 ### s2_data_city
-
-
 
 ```sql
 GEOGRAPHY s2_data_city(name VARCHAR)
 ```
 
-
 ### s2_data_country
-
-
 
 ```sql
 GEOGRAPHY s2_data_country(name VARCHAR)
 ```
 
 ## Overlay
-
 
 ### s2_difference
 
@@ -502,7 +469,6 @@ Returns the difference of two geographies.
 GEOGRAPHY s2_difference(geog1 GEOGRAPHY, geog2 GEOGRAPHY)
 ```
 
-
 ### s2_intersection
 
 Returns the intersection of two geographies.
@@ -510,7 +476,6 @@ Returns the intersection of two geographies.
 ```sql
 GEOGRAPHY s2_intersection(geog1 GEOGRAPHY, geog2 GEOGRAPHY)
 ```
-
 
 ### s2_union
 
@@ -522,7 +487,6 @@ GEOGRAPHY s2_union(geog1 GEOGRAPHY, geog2 GEOGRAPHY)
 
 ## Predicate
 
-
 ### s2_contains
 
 Returns true if the first geography contains the second.
@@ -530,7 +494,6 @@ Returns true if the first geography contains the second.
 ```sql
 BOOLEAN s2_contains(geog1 GEOGRAPHY, geog2 GEOGRAPHY)
 ```
-
 
 ### s2_equals
 
@@ -540,7 +503,6 @@ Returns true if the two geographies are equal.
 BOOLEAN s2_equals(geog1 GEOGRAPHY, geog2 GEOGRAPHY)
 ```
 
-
 ### s2_intersects
 
 Returns true if the two geographies intersect.
@@ -549,7 +511,6 @@ Returns true if the two geographies intersect.
 BOOLEAN s2_intersects(geog1 GEOGRAPHY, geog2 GEOGRAPHY)
 ```
 
-
 ### s2_mayintersect
 
 Returns true if the two geographies may intersect.
@@ -557,4 +518,3 @@ Returns true if the two geographies may intersect.
 ```sql
 BOOLEAN s2_mayintersect(geog1 GEOGRAPHY, geog2 GEOGRAPHY)
 ```
-
