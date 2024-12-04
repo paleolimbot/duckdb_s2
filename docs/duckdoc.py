@@ -97,13 +97,13 @@ def generate_test_functions():
             "description": "An extended summary of the city",
             "example": "SELECT s2_data_city('Toronto');",
             "signatures": [
-                {"return_type": "GEOGRAPHY", "params": []},
+                {"return": "GEOGRAPHY", "params": []},
                 {
-                    "return_type": "GEOGRAPHY",
+                    "return": "GEOGRAPHY",
                     "params": [{"name": "city", "type": "VARCHAR"}],
                 },
                 {
-                    "return_type": "GEOGRAPHY",
+                    "return": "GEOGRAPHY",
                     "params": [
                         {"name": "city", "type": "VARCHAR"},
                         {"name": "foofy", "type": "INTEGER"},
@@ -117,7 +117,7 @@ def generate_test_functions():
             "summary": "Return a country from the example data or error if no such country exists.",
             "signatures": [
                 {
-                    "return_type": "GEOGRAPHY",
+                    "return": "GEOGRAPHY",
                     "params": [{"name": "country", "type": "VARCHAR"}],
                 },
             ],
@@ -128,7 +128,7 @@ def generate_test_functions():
             "summary": "Return the longitude of a point geography or NaN if none exist.s",
             "signatures": [
                 {
-                    "return_type": "DOUBLE",
+                    "return": "DOUBLE",
                     "params": [{"name": "geog", "type": "GEOGRAPHY"}],
                 },
             ],
