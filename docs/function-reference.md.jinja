@@ -9,15 +9,13 @@
 {% endfor %}
 {%- endfor %}
 
-{% for category in categories %}
+{% for category in categories -%}
 ## {{ category.name | replace('-', ' ') | title }}
 
 {% for function in category.functions %}
 ### {{ function.name }}
 
 {{ function.summary }}
-
-#### Signature
 
 ```sql
 {% for sig in function.signatures -%}
@@ -36,12 +34,12 @@
 {{ function.description }}
 {% endif -%}
 
-{%- if function.example -%}
+{% if function.example %}
 #### Example
 
 ```sql
 {{ function.example }}
 ```
-{%- endif -%}
+{% endif -%}
 {%- endfor -%}
 {%- endfor -%}
