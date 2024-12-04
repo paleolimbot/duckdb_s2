@@ -29,8 +29,29 @@ struct S2Covering {
             variant.SetFunction(ExecuteFn);
           });
 
-          func.SetDescription("Returns the S2 cell covering of the geography.");
-          func.SetExample("SELECT s2_covering('POINT(0 0)') AS covering;");
+          func.SetDescription(R"(
+Returns the S2 cell covering of the geography.
+
+A covering is a deterministic S2_CELL_UNION (i.e., list of S2_CELLs) that
+completely covers a geography. This is useful as a compact approximation
+of a geography that can be used to select possible candidates for intersection.
+
+Note that an S2_CELL_UNION is a thin wrapper around a LIST of S2_CELL, such
+that DuckDB LIST functions can be used to unnest, extract, or otherwise
+interact with the result.
+
+See the [Cell Operators](#cellops) section for ways to interact with cells.
+)");
+          func.SetExample(R"(
+SELECT s2_covering(s2_data_country('Germany')) AS covering;
+----
+-- Find countries that might contain Berlin
+SELECT name as country, cell FROM (
+  SELECT name, UNNEST(s2_covering(geog)) as cell
+  FROM s2_data_countries()
+) WHERE
+s2_cell_contains(cell, s2_data_city('Berlin')::S2_CELL_CENTER::S2_CELL);
+)");
 
           func.SetTag("ext", "geography");
           func.SetTag("category", "bounds");
@@ -46,13 +67,16 @@ struct S2Covering {
           });
 
           func.SetDescription(
-              "Returns the S2 cell covering of the geography with a fixed level.");
+              R"(
+Returns the S2 cell covering of the geography with a fixed level.
+
+See `[s2_covering](#s2_covering)` for further detail and examples.
+)");
           func.SetExample(R"(
-SELECT s2_covering_fixed_level('POINT(0 0)', 4) AS covering;
+SELECT s2_covering_fixed_level(s2_data_country('Germany'), 3) AS covering;
 ----
-SELECT s2_covering_fixed_level('POINT(0 0)', 5) AS covering;
-          )"
-          );
+SELECT s2_covering_fixed_level(s2_data_country('Germany'), 4) AS covering;
+          )");
 
           func.SetTag("ext", "geography");
           func.SetTag("category", "bounds");
