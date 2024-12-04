@@ -48,9 +48,9 @@ struct S2Covering {
           func.SetDescription(
               "Returns the S2 cell covering of the geography with a fixed level.");
           func.SetExample(R"(
-            SELECT s2_covering_fixed_level('POINT(0 0)', 4) AS covering;
-            ----
-            SELECT s2_covering_fixed_level('POINT(0 0)', 5) AS covering;
+SELECT s2_covering_fixed_level('POINT(0 0)', 4) AS covering;
+----
+SELECT s2_covering_fixed_level('POINT(0 0)', 5) AS covering;
           )"
           );
 

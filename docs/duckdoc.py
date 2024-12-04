@@ -1,6 +1,7 @@
 import json
-from pathlib import Path
 import subprocess
+import textwrap
+from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -57,7 +58,7 @@ def parse_functions(functions):
 def run_function_examples(functions, duckdb_path, extension_name):
     for func in functions:
         if "example" in func and func["example"]:
-            func["example"] = run_example(duckdb_path, extension_name, func["example"])
+            func["example"] = run_examples(duckdb_path, extension_name, func["example"])
 
 
 def query_functions(duckdb_path, extension_name):
@@ -209,8 +210,8 @@ FROM (
 
 
 if __name__ == "__main__":
-    import sys
     import argparse
+    import sys
 
     parser = argparse.ArgumentParser(
         description="Render function documentation for a DuckDB extension",
