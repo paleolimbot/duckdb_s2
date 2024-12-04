@@ -1,0 +1,45 @@
+
+# Function Reference
+
+| Function | Summary |
+| --- | --- |
+{% for category in categories -%}
+{% for function in category.functions -%}
+| {{ function.name }} | {{ function.summary }}|
+
+{%- endfor %}
+{%- endfor %}
+
+{% for category in categories %}
+
+## {{ category.name | title }}
+
+{% for function in category.functions %}
+
+### {{ function.name }}
+
+{{ function.summary }}
+
+#### Signature
+
+```sql
+{{ function.signature }}
+```
+
+{% if function.description %}
+#### Description
+
+{{ function.description }}
+{% endif %}
+
+{% if function.example %}
+#### Example
+
+```sql
+{{ function.example }}
+```
+{% endif %}
+
+{% endfor %}
+
+{% endfor %}
