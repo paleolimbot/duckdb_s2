@@ -424,4 +424,3 @@ Returns true if the two geographies may intersect.
 ```sql
 BOOLEAN s2_mayintersect(geog1 GEOGRAPHY, geog2 GEOGRAPHY)
 ```
-

@@ -127,7 +127,7 @@ For non-polygon geographies, `s2_perimeter()` returns `0.0`. For a  polygon with
 more than one ring, this function returns the sum of the perimeter of all
 rings.
 )");
-      func.SetExample(R"(
+          func.SetExample(R"(
 SELECT s2_perimeter(s2_data_country('Fiji')) AS perimeter;
 ----
 SELECT s2_perimeter('POINT (0 0)'::GEOGRAPHY) AS perimeter;
