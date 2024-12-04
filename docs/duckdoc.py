@@ -5,12 +5,16 @@ import subprocess
 from jinja2 import Environment, FileSystemLoader
 
 
-def main(extension_name, duckdb_path=None, output_path=None):
+def main(extension_name, duckdb_path=None, output_path=None, run_examples=False):
     if not duckdb_path:
         duckdb_path = find_duckdb(extension_name)
 
     functions = query_functions(duckdb_path, extension_name)
     parse_functions(functions)
+
+    if run_examples:
+        run_function_examples(functions, duckdb_path, extension_name)
+
     context = generate_context(functions)
     render_all(context, output_path)
 
@@ -50,6 +54,12 @@ def parse_functions(functions):
             func["description"] = "\n".join(desc_lines[1:])
 
 
+def run_function_examples(functions, duckdb_path, extension_name):
+    for func in functions:
+        if "example" in func and func["example"]:
+            func["example"] = run_example(duckdb_path, extension_name, func["example"])
+
+
 def query_functions(duckdb_path, extension_name):
     sql = FUNCTION_DEF_SQL.replace("$EXTENSION_NAME$", extension_name)
     proc = subprocess.run(
@@ -69,6 +79,38 @@ def query_functions(duckdb_path, extension_name):
         raise ValueError("Function query returned zero functions")
 
     return [json.loads(line) for line in proc.stdout.splitlines()]
+
+
+def run_examples(duckdb_path, extension_name, example_sql):
+    example_sql = example_sql.strip()
+    examples = example_sql.split("\n----")
+    example_results = [
+        run_example(duckdb_path, extension_name, example) for example in examples
+    ]
+    return "\n\n".join(example_results)
+
+
+def run_example(duckdb_path, extension_name, example_sql):
+    example_sql = example_sql.strip()
+    proc = subprocess.run(
+        [
+            duckdb_path,
+            "-c",
+            f"LOAD {extension_name};" + example_sql,
+        ],
+        capture_output=True,
+    )
+
+    if proc.returncode != 0:
+        raise ValueError(
+            "Example query failed. Query was:\n---\n"
+            + example_sql
+            + "\n---\n"
+            + proc.stderr.decode()
+        )
+
+    out_lines = ["--" + line for line in proc.stdout.decode().splitlines()]
+    return "\n".join([example_sql] + out_lines)
 
 
 def find_duckdb(extension_name):
@@ -187,8 +229,17 @@ if __name__ == "__main__":
         default="",
     )
     parser.add_argument(
+        "--run-examples",
+        help=(
+            "Run examples and append the commented output. Experimental "
+            "and currently assumes that the 'example' field is valid SQL separated by "
+            "four dashes (----) on a new line"
+        ),
+        action="store_true",
+    )
+    parser.add_argument(
         "-o", "--output", help="The output file path", default="function-reference.md"
     )
 
     args = parser.parse_args(sys.argv[1:])
-    main(args.extension, args.duckdb, args.output)
+    main(args.extension, args.duckdb, args.output, args.run_examples)
