@@ -31,8 +31,8 @@
 | [`s2_geogfromtext`](#s2_geogfromtext) | Returns the geography from a WKT string.|
 | [`s2_geogfromwkb`](#s2_geogfromwkb) | Converts a WKB blob to a geography.|
 | [`s2_prepare`](#s2_prepare) | Prepares a geography for faster predicate and overlay operations.|
-| [`s2_data_city`](#s2_data_city) | |
-| [`s2_data_country`](#s2_data_country) | |
+| [`s2_data_city`](#s2_data_city) | Get an example city or country from [`s2_data_cities()`](#s2_data_cities)|
+| [`s2_data_country`](#s2_data_country) | Get an example city or country from [`s2_data_cities()`](#s2_data_cities)|
 | [`s2_difference`](#s2_difference) | Returns the difference of two geographies.|
 | [`s2_intersection`](#s2_intersection) | Returns the intersection of two geographies.|
 | [`s2_union`](#s2_union) | Returns the union of two geographies.|
@@ -419,7 +419,7 @@ SELECT s2_cell_contains('5/30'::S2_CELL, '5/3'::S2_CELL) AS result;
 --│ result  │
 --│ boolean │
 --├─────────┤
---│ true    │
+--│ false   │
 --└─────────┘
 ```
 
@@ -830,16 +830,67 @@ GEOGRAPHY s2_prepare(geog GEOGRAPHY)
 
 ### s2_data_city
 
+Get an example city or country from [`s2_data_cities()`](#s2_data_cities)
+
 ```sql
 GEOGRAPHY s2_data_city(name VARCHAR)
 ```
 
+#### Description
+
+or [`s2_data_countries()`](#s2_data_countries) by name.
+
+#### Example
+
+```sql
+SELECT s2_data_city('Toronto') as city;
+--┌────────────────────────────────┐
+--│              city              │
+--│           geography            │
+--├────────────────────────────────┤
+--│ POINT (-79.4219667 43.7019257) │
+--└────────────────────────────────┘
+
+SELECT s2_data_country('Fiji') as country;
+--┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+--│                                                       country                                                        │
+--│                                                      geography                                                       │
+--├──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+--│ MULTIPOLYGON (((178.3736 -17.33992, 178.12557 -17.50481, 177.67087 -17.381139999999995, 177.28504 -17.72465, 177.3…  │
+--└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
 ### s2_data_country
+
+Get an example city or country from [`s2_data_cities()`](#s2_data_cities)
 
 ```sql
 GEOGRAPHY s2_data_country(name VARCHAR)
 ```
 
+#### Description
+
+or [`s2_data_countries()`](#s2_data_countries) by name.
+
+#### Example
+
+```sql
+SELECT s2_data_city('Toronto') as city;
+--┌────────────────────────────────┐
+--│              city              │
+--│           geography            │
+--├────────────────────────────────┤
+--│ POINT (-79.4219667 43.7019257) │
+--└────────────────────────────────┘
+
+SELECT s2_data_country('Fiji') as country;
+--┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+--│                                                       country                                                        │
+--│                                                      geography                                                       │
+--├──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+--│ MULTIPOLYGON (((178.3736 -17.33992, 178.12557 -17.50481, 177.67087 -17.381139999999995, 177.28504 -17.72465, 177.3…  │
+--└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
 ## Overlay
 
 ### s2_difference
