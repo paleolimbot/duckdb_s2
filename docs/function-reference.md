@@ -12,15 +12,15 @@
 | [`s2_covering`](#s2_covering) | Returns the S2 cell covering of the geography.|
 | [`s2_covering_fixed_level`](#s2_covering_fixed_level) | Returns the S2 cell covering of the geography with a fixed level.|
 | [`s2_arbitrarycellfromwkb`](#s2_arbitrarycellfromwkb) | Get an arbitrary S2_CELL_CENTER on or near the input.|
-| [`s2_cell_child`](#s2_cell_child) | |
-| [`s2_cell_contains`](#s2_cell_contains) | |
-| [`s2_cell_edge_neighbor`](#s2_cell_edge_neighbor) | |
+| [`s2_cell_child`](#s2_cell_child) | Compute a child S2_CELL.|
+| [`s2_cell_contains`](#s2_cell_contains) | Return true if `cell1` contains `cell2`.|
+| [`s2_cell_edge_neighbor`](#s2_cell_edge_neighbor) | Compute a neighbor S2_CELL.|
 | [`s2_cell_from_token`](#s2_cell_from_token) | Parse a hexadecimal token as an S2_CELL.|
-| [`s2_cell_intersects`](#s2_cell_intersects) | |
+| [`s2_cell_intersects`](#s2_cell_intersects) | Return true if `cell1` contains `cell2` or `cell2` contains `cell1`.|
 | [`s2_cell_level`](#s2_cell_level) | Extract the level (0-30, inclusive) from an S2_CELL.|
-| [`s2_cell_parent`](#s2_cell_parent) | |
-| [`s2_cell_range_max`](#s2_cell_range_max) | |
-| [`s2_cell_range_min`](#s2_cell_range_min) | |
+| [`s2_cell_parent`](#s2_cell_parent) | Compute a parent S2_CELL.|
+| [`s2_cell_range_max`](#s2_cell_range_max) | Compute the maximum leaf cell value contained within an S2_CELL.|
+| [`s2_cell_range_min`](#s2_cell_range_min) | Compute the minimum leaf cell value contained within an S2_CELL.|
 | [`s2_cell_token`](#s2_cell_token) | Serialize an S2_CELL as a compact hexadecimal token.|
 | [`s2_cell_vertex`](#s2_cell_vertex) | Extract a vertex (corner) of an S2 cell.|
 | [`s2_cellfromlonlat`](#s2_cellfromlonlat) | Convert a lon/lat pair to S2_CELL_CENTER.|
@@ -361,20 +361,97 @@ SELECT * FROM glob('cities/**') LIMIT 5;
 
 ### s2_cell_child
 
+Compute a child S2_CELL.
+
 ```sql
-S2_CELL s2_cell_child(cell S2_CELL, index TINYINT)
+S2_CELL s2_cell_child(cell S2_CELL, index INTEGER)
+```
+
+#### Description
+
+Each S2_CELL that is not a leaf cell (level 30) has exactly four children
+(index 0-3 inclusive). Values for `index` outside this range will result in
+an invalid returned cell.
+
+#### Example
+
+```sql
+SELECT s2_cell_child('5/00000'::S2_CELL, ind) as cell
+FROM (VALUES (0), (1), (2), (3), (4)) indices(ind);
+--┌───────────────────────────┐
+--│           cell            │
+--│          s2_cell          │
+--├───────────────────────────┤
+--│                  5/000000 │
+--│                  5/000001 │
+--│                  5/000002 │
+--│                  5/000003 │
+--│ Invalid: ffffffffffffffff │
+--└───────────────────────────┘
 ```
 
 ### s2_cell_contains
+
+Return true if `cell1` contains `cell2`.
 
 ```sql
 BOOLEAN s2_cell_contains(cell1 S2_CELL, cell2 S2_CELL)
 ```
 
-### s2_cell_edge_neighbor
+#### Description
+
+See [`s2_cell_range_min()`](#s2_cell_range_min) and [`s2_cell_range_max()`](#s2_cell_range_max)
+for how to calculate this in a way that DuckDB can use to accellerate a join.
+
+#### Example
 
 ```sql
-S2_CELL s2_cell_edge_neighbor(cell S2_CELL, index TINYINT)
+SELECT s2_cell_contains('5/3'::S2_CELL, '5/30'::S2_CELL) AS result;
+--┌─────────┐
+--│ result  │
+--│ boolean │
+--├─────────┤
+--│ true    │
+--└─────────┘
+
+SELECT s2_cell_contains('5/30'::S2_CELL, '5/3'::S2_CELL) AS result;
+--┌─────────┐
+--│ result  │
+--│ boolean │
+--├─────────┤
+--│ true    │
+--└─────────┘
+```
+
+### s2_cell_edge_neighbor
+
+Compute a neighbor S2_CELL.
+
+```sql
+S2_CELL s2_cell_edge_neighbor(cell S2_CELL, index INTEGER)
+```
+
+#### Description
+
+Every S2_CELL has a neighbor at the top, left, right, and bottom,
+which can be selected from index values 0-3 (inclusive). Values of
+`index` outside this range will result in an invalid returned cell value.
+
+#### Example
+
+```sql
+SELECT s2_cell_edge_neighbor('5/00000'::S2_CELL, ind) as cell
+FROM (VALUES (0), (1), (2), (3), (4)) indices(ind);
+--┌───────────────────────────┐
+--│           cell            │
+--│          s2_cell          │
+--├───────────────────────────┤
+--│                   3/22222 │
+--│                   5/00001 │
+--│                   5/00003 │
+--│                   4/33333 │
+--│ Invalid: ffffffffffffffff │
+--└───────────────────────────┘
 ```
 
 ### s2_cell_from_token
@@ -414,8 +491,38 @@ SELECT s2_cell_from_token('foofy');
 
 ### s2_cell_intersects
 
+Return true if `cell1` contains `cell2` or `cell2` contains `cell1`.
+
 ```sql
 BOOLEAN s2_cell_intersects(cell1 S2_CELL, cell2 S2_CELL)
+```
+
+#### Description
+
+See [`s2_cell_range_min()`](#s2_cell_range_min) and [`s2_cell_range_max()`](#s2_cell_range_max)
+for how to calculate this in a way that DuckDB can use to accellerate a join.
+
+Note that this will return false for neighboring cells. Use [`s2_intersects()`](#s2_intersects)
+if you need this type of intersection check.
+
+#### Example
+
+```sql
+SELECT s2_cell_intersects('5/3'::S2_CELL, '5/30'::S2_CELL) AS result;
+--┌─────────┐
+--│ result  │
+--│ boolean │
+--├─────────┤
+--│ true    │
+--└─────────┘
+
+SELECT s2_cell_intersects('5/30'::S2_CELL, '5/3'::S2_CELL) AS result;
+--┌─────────┐
+--│ result  │
+--│ boolean │
+--├─────────┤
+--│ true    │
+--└─────────┘
 ```
 
 ### s2_cell_level
@@ -440,20 +547,79 @@ SELECT s2_cell_level('5/33120'::S2_CELL);
 
 ### s2_cell_parent
 
+Compute a parent S2_CELL.
+
 ```sql
-S2_CELL s2_cell_parent(cell S2_CELL, index TINYINT)
+S2_CELL s2_cell_parent(cell S2_CELL, level INTEGER)
+```
+
+#### Description
+
+Note that level is clamped to the valid range 0-30. A negative value will
+be subtracted from the current level (e.g., use `-1` for the immediate parent).
+
+#### Example
+
+```sql
+SELECT s2_cell_parent(s2_cellfromlonlat(-64, 45), level) as cell
+FROM (VALUES (0), (1), (2), (3), (4), (5), (-1), (-2)) levels(level);
+--┌─────────────────────────────────┐
+--│              cell               │
+--│             s2_cell             │
+--├─────────────────────────────────┤
+--│                              2/ │
+--│                             2/1 │
+--│                            2/11 │
+--│                           2/112 │
+--│                          2/1122 │
+--│                         2/11223 │
+--│ 2/11223031001212300131223233021 │
+--│  2/1122303100121230013122323302 │
+--└─────────────────────────────────┘
 ```
 
 ### s2_cell_range_max
+
+Compute the maximum leaf cell value contained within an S2_CELL.
 
 ```sql
 S2_CELL s2_cell_range_max(cell S2_CELL)
 ```
 
+#### Example
+
+```sql
+SELECT
+  s2_cell_range_min('5/00000'::S2_CELL) AS cell_min,
+  s2_cell_range_max('5/00000'::S2_CELL) AS cell_max;
+--┌──────────────────────────────────┬──────────────────────────────────┐
+--│             cell_min             │             cell_max             │
+--│             s2_cell              │             s2_cell              │
+--├──────────────────────────────────┼──────────────────────────────────┤
+--│ 5/000000000000000000000000000000 │ 5/000003333333333333333333333333 │
+--└──────────────────────────────────┴──────────────────────────────────┘
+```
+
 ### s2_cell_range_min
+
+Compute the minimum leaf cell value contained within an S2_CELL.
 
 ```sql
 S2_CELL s2_cell_range_min(cell S2_CELL)
+```
+
+#### Example
+
+```sql
+SELECT
+  s2_cell_range_min('5/00000'::S2_CELL) AS cell_min,
+  s2_cell_range_max('5/00000'::S2_CELL) AS cell_max;
+--┌──────────────────────────────────┬──────────────────────────────────┐
+--│             cell_min             │             cell_max             │
+--│             s2_cell              │             s2_cell              │
+--├──────────────────────────────────┼──────────────────────────────────┤
+--│ 5/000000000000000000000000000000 │ 5/000003333333333333333333333333 │
+--└──────────────────────────────────┴──────────────────────────────────┘
 ```
 
 ### s2_cell_token
@@ -512,9 +678,6 @@ conversion.
 ```sql
 SELECT s2_cell_vertex('5/'::S2_CELL, id) as vertex,
 FROM (VALUES (0), (1), (2), (3)) vertices(id);
-
--- Usually easier to cast to GEOGRAPHY
-SELECT '5/'::S2_CELL::GEOGRAPHY as geog;
 --┌──────────────────────────────────┐
 --│              vertex              │
 --│            geography             │
@@ -524,6 +687,9 @@ SELECT '5/'::S2_CELL::GEOGRAPHY as geog;
 --│ POINT (45 -35.264389682754654)   │
 --│ POINT (-45 -35.264389682754654)  │
 --└──────────────────────────────────┘
+
+-- Usually easier to cast to GEOGRAPHY
+SELECT '5/'::S2_CELL::GEOGRAPHY as geog;
 --┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 --│                                                         geog                                                         │
 --│                                                      geography                                                       │
