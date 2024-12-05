@@ -25,8 +25,8 @@
 | [`s2_cell_vertex`](#s2_cell_vertex) | Extract a vertex (corner) of an S2 cell.|
 | [`s2_cellfromlonlat`](#s2_cellfromlonlat) | Convert a lon/lat pair to S2_CELL_CENTER.|
 | [`s2_cellfromwkb`](#s2_cellfromwkb) | Convert a WKB point directly to S2_CELL_CENTER.|
-| [`s2_astext`](#s2_astext) | Returns the WKT string of the geography.|
-| [`s2_aswkb`](#s2_aswkb) | Returns the WKB blob of the geography.|
+| [`s2_astext`](#s2_astext) | Returns the well-known text (WKT) string of the geography.|
+| [`s2_aswkb`](#s2_aswkb) | Serialize a GEOGRAPHY as well-known binary (WKB).|
 | [`s2_format`](#s2_format) | Returns the WKT string of the geography with a given precision.|
 | [`s2_geogfromtext`](#s2_geogfromtext) | Returns the geography from a WKT string.|
 | [`s2_geogfromwkb`](#s2_geogfromwkb) | Converts a WKB blob to a geography.|
@@ -780,18 +780,62 @@ LIMIT 5;
 
 ### s2_astext
 
-Returns the WKT string of the geography.
+Returns the well-known text (WKT) string of the geography.
 
 ```sql
 VARCHAR s2_astext(geog GEOGRAPHY)
 ```
 
+#### Description
+
+Note that because the internal representation of the GEOGRAPHY type is either
+an S2_CELL_CENTER or a unit vector, WKT typically does not roundtrip through a
+GEOGRAPHY unless the output is rounded using `[s2_format()`][#s2_format].
+
+The output contains spherical edges. If edges are large and the consumer does
+not know that the edges are spherical, this may cause issues.
+
+Calling this function has the same effect as casting to VARCHAR.
+
+#### Example
+
+```sql
+SELECT s2_astext(s2_data_city('Vancouver'));
+--┌──────────────────────────────────────┐
+--│ s2_astext(s2_data_city('Vancouver')) │
+--│               varchar                │
+--├──────────────────────────────────────┤
+--│ POINT (-123.12359 49.2753624)        │
+--└──────────────────────────────────────┘
+```
+
 ### s2_aswkb
 
-Returns the WKB blob of the geography.
+Serialize a GEOGRAPHY as well-known binary (WKB).
 
 ```sql
 BLOB s2_aswkb(geog GEOGRAPHY)
+```
+
+#### Description
+
+Note that because the internal representation of the GEOGRAPHY type is either
+an S2_CELL_CENTER or a unit vector, WKB typically does not roundtrip through a
+GEOGRAPHY.
+
+The output contains spherical edges. If edges are large and the consumer does
+not know that the edges are spherical, this may cause issues.
+
+#### Example
+
+```sql
+SELECT s2_aswkb(s2_data_city('Toronto')) as wkb;
+--┌───────────────────────────────────────────────────────────────────────┐
+--│                                  wkb                                  │
+--│                                 blob                                  │
+--├───────────────────────────────────────────────────────────────────────┤
+--│ \x01\x01\x00\x00\x00\x11 \x9E\x80\x01\xDBS\xC0g\xDC\x8A\xB3\xD8\xD9E@ │
+--└───────────────────────────────────────────────────────────────────────┘
 ```
 
 ### s2_format
@@ -800,6 +844,23 @@ Returns the WKT string of the geography with a given precision.
 
 ```sql
 VARCHAR s2_format(geog GEOGRAPHY, precision TINYINT)
+```
+
+#### Description
+
+See [`s2_astext()`](#s2_text) for parameter-free lossless output. Like `s2_text()`,
+this function exports spherical edges.
+
+#### Example
+
+```sql
+SELECT s2_format(s2_data_city('Vancouver'), 1);
+--┌─────────────────────────────────────────┐
+--│ s2_format(s2_data_city('Vancouver'), 1) │
+--│                 varchar                 │
+--├─────────────────────────────────────────┤
+--│ POINT (-123.1 49.3)                     │
+--└─────────────────────────────────────────┘
 ```
 
 ### s2_geogfromtext
@@ -818,6 +879,25 @@ Converts a WKB blob to a geography.
 GEOGRAPHY s2_geogfromwkb(wkb BLOB)
 ```
 
+#### Description
+
+The input WKB blog is assumed to have longitude/latitude coordinates and have
+spherical edges. If edges are long and the input had a different edge type,
+the resulting GEOGRAPHY may be invalid or represent a different location than
+intended.
+
+#### Example
+
+```sql
+SELECT s2_geogfromwkb(s2_aswkb(s2_data_city('Toronto'))) as geog;
+--┌────────────────────────────────┐
+--│              geog              │
+--│           geography            │
+--├────────────────────────────────┤
+--│ POINT (-79.4219667 43.7019257) │
+--└────────────────────────────────┘
+```
+
 ### s2_prepare
 
 Prepares a geography for faster predicate and overlay operations.
@@ -826,6 +906,46 @@ Prepares a geography for faster predicate and overlay operations.
 GEOGRAPHY s2_prepare(geog GEOGRAPHY)
 ```
 
+#### Description
+
+For advanced users, this is useful for preparing input that will be subject
+to a large number of intersection or containment checks. This high level terms,
+this operation builds a cell-based index on the edges of the geography that
+would otherwise have to occur on every intersection check.
+
+This function returns its input for very small geographies (e.g., points)
+that do not benefit from this operation.
+
+#### Example
+
+```sql
+SELECT s2_prepare(s2_data_country('Fiji'));
+--┌─────────────────────────────────────┐
+--│ s2_prepare(s2_data_country('Fiji')) │
+--│              geography              │
+--├─────────────────────────────────────┤
+--│ <S2ShapeIndex 478 b>                │
+--└─────────────────────────────────────┘
+
+CREATE TABLE countries AS
+SELECT name, s2_prepare(geog) as geog
+FROM s2_data_countries();
+
+SELECT cities.name as city, countries.name as country
+FROM s2_data_cities() AS cities
+INNER JOIN countries ON s2_contains(countries.geog, cities.geog)
+LIMIT 5;
+--┌───────────┬──────────────────────┐
+--│   city    │       country        │
+--│  varchar  │       varchar        │
+--├───────────┼──────────────────────┤
+--│ Kabul     │ Afghanistan          │
+--│ Luanda    │ Angola               │
+--│ Tirana    │ Albania              │
+--│ Abu Dhabi │ United Arab Emirates │
+--│ Dubai     │ United Arab Emirates │
+--└───────────┴──────────────────────┘
+```
 ## Data
 
 ### s2_data_city
