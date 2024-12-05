@@ -401,7 +401,7 @@ BOOLEAN s2_cell_contains(cell1 S2_CELL, cell2 S2_CELL)
 #### Description
 
 See [`s2_cell_range_min()`](#s2_cell_range_min) and [`s2_cell_range_max()`](#s2_cell_range_max)
-for how to calculate this in a way that DuckDB can use to accellerate a join.
+for how to calculate this in a way that DuckDB can use to accelerate a join.
 
 #### Example
 
@@ -500,7 +500,7 @@ BOOLEAN s2_cell_intersects(cell1 S2_CELL, cell2 S2_CELL)
 #### Description
 
 See [`s2_cell_range_min()`](#s2_cell_range_min) and [`s2_cell_range_max()`](#s2_cell_range_max)
-for how to calculate this in a way that DuckDB can use to accellerate a join.
+for how to calculate this in a way that DuckDB can use to accelerate a join.
 
 Note that this will return false for neighboring cells. Use [`s2_intersects()`](#s2_intersects)
 if you need this type of intersection check.

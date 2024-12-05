@@ -786,7 +786,7 @@ struct S2CellIntersects {
 Return true if `cell1` contains `cell2` or `cell2` contains `cell1`.
 
 See [`s2_cell_range_min()`](#s2_cell_range_min) and [`s2_cell_range_max()`](#s2_cell_range_max)
-for how to calculate this in a way that DuckDB can use to accellerate a join.
+for how to calculate this in a way that DuckDB can use to accelerate a join.
 
 Note that this will return false for neighboring cells. Use [`s2_intersects()`](#s2_intersects)
 if you need this type of intersection check.
@@ -819,7 +819,7 @@ struct S2CellContains {
 Return true if `cell1` contains `cell2`.
 
 See [`s2_cell_range_min()`](#s2_cell_range_min) and [`s2_cell_range_max()`](#s2_cell_range_max)
-for how to calculate this in a way that DuckDB can use to accellerate a join.
+for how to calculate this in a way that DuckDB can use to accelerate a join.
 )");
           func.SetExample(R"(
 SELECT s2_cell_contains('5/3'::S2_CELL, '5/30'::S2_CELL) AS result;
