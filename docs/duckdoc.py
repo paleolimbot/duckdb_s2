@@ -1,6 +1,7 @@
 import json
 import subprocess
 import re
+import tempfile
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
@@ -29,10 +30,9 @@ def render_all(context, output_path):
 
     # Canonicalize multiple newlines
     content = re.sub("\n\n+", "\n\n", content)
-    content = re.sub("\n+$", "\n", content, flags=re.MULTILINE)
 
     with open(output_path, "w") as out:
-        out.write(content)
+        out.write(content.rstrip() + "\n")
 
 
 def generate_context(functions):
@@ -89,23 +89,26 @@ def query_functions(duckdb_path, extension_name):
 
 
 def run_examples(duckdb_path, extension_name, example_sql):
-    example_sql = example_sql.strip()
-    examples = example_sql.split("\n----")
-    example_results = [
-        run_example(duckdb_path, extension_name, example) for example in examples
-    ]
-    return "\n\n".join(example_results)
+    with tempfile.TemporaryDirectory() as tdir:
+        example_sql = example_sql.strip()
+        examples = example_sql.split("\n----")
+        example_results = [
+            run_example(duckdb_path, extension_name, example, tdir)
+            for example in examples
+        ]
+        return "\n\n".join(example_results)
 
 
-def run_example(duckdb_path, extension_name, example_sql):
+def run_example(duckdb_path, extension_name, example_sql, cwd=None):
     example_sql = example_sql.strip()
     proc = subprocess.run(
         [
-            duckdb_path,
+            Path(duckdb_path).resolve(),
             "-c",
             f"LOAD {extension_name};" + example_sql,
         ],
         capture_output=True,
+        cwd=cwd,
     )
 
     if proc.returncode != 0:

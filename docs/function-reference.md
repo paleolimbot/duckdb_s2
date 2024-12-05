@@ -11,20 +11,20 @@
 | [`s2_y`](#s2_y) | Extract the latitude of a point geography.|
 | [`s2_covering`](#s2_covering) | Returns the S2 cell covering of the geography.|
 | [`s2_covering_fixed_level`](#s2_covering_fixed_level) | Returns the S2 cell covering of the geography with a fixed level.|
-| [`s2_arbitrarycellfromwkb`](#s2_arbitrarycellfromwkb) | Convert the first vertex to S2_CELL_CENTER for sorting.|
+| [`s2_arbitrarycellfromwkb`](#s2_arbitrarycellfromwkb) | Get an arbitrary S2_CELL_CENTER on or near the input.|
 | [`s2_cell_child`](#s2_cell_child) | |
 | [`s2_cell_contains`](#s2_cell_contains) | |
 | [`s2_cell_edge_neighbor`](#s2_cell_edge_neighbor) | |
-| [`s2_cell_from_token`](#s2_cell_from_token) | |
+| [`s2_cell_from_token`](#s2_cell_from_token) | Parse a hexadecimal token as an S2_CELL.|
 | [`s2_cell_intersects`](#s2_cell_intersects) | |
-| [`s2_cell_level`](#s2_cell_level) | |
+| [`s2_cell_level`](#s2_cell_level) | Extract the level (0-30, inclusive) from an S2_CELL.|
 | [`s2_cell_parent`](#s2_cell_parent) | |
 | [`s2_cell_range_max`](#s2_cell_range_max) | |
 | [`s2_cell_range_min`](#s2_cell_range_min) | |
-| [`s2_cell_token`](#s2_cell_token) | |
-| [`s2_cell_vertex`](#s2_cell_vertex) | Returns the vertex of the S2 cell.|
-| [`s2_cellfromlonlat`](#s2_cellfromlonlat) | Convert a lon/lat pair to S2_CELL_CENTER|
-| [`s2_cellfromwkb`](#s2_cellfromwkb) | Convert a WKB point directly to S2_CELL_CENTER|
+| [`s2_cell_token`](#s2_cell_token) | Serialize an S2_CELL as a compact hexadecimal token.|
+| [`s2_cell_vertex`](#s2_cell_vertex) | Extract a vertex (corner) of an S2 cell.|
+| [`s2_cellfromlonlat`](#s2_cellfromlonlat) | Convert a lon/lat pair to S2_CELL_CENTER.|
+| [`s2_cellfromwkb`](#s2_cellfromwkb) | Convert a WKB point directly to S2_CELL_CENTER.|
 | [`s2_astext`](#s2_astext) | Returns the WKT string of the geography.|
 | [`s2_aswkb`](#s2_aswkb) | Returns the WKB blob of the geography.|
 | [`s2_format`](#s2_format) | Returns the WKT string of the geography with a given precision.|
@@ -305,10 +305,58 @@ SELECT s2_covering_fixed_level(s2_data_country('Germany'), 4) AS covering;
 
 ### s2_arbitrarycellfromwkb
 
-Convert the first vertex to S2_CELL_CENTER for sorting.
+Get an arbitrary S2_CELL_CENTER on or near the input.
 
 ```sql
 S2_CELL_CENTER s2_arbitrarycellfromwkb(wkb BLOB)
+```
+
+#### Description
+
+This function parses the minimum required WKB input to obtain the first
+longitude/latitude pair it sees and finds the closest S2_CELL_CENTER. This
+is useful for sorting or partitioning of lon/lat input when there is no need
+to create a GEOGRAPHY.
+
+Note that longitude/latitude is assumed in the input.
+
+#### Example
+
+```sql
+SELECT name, s2_arbitrarycellfromwkb(s2_aswkb(geog)) AS cell
+FROM s2_data_cities()
+LIMIT 5;
+--┌──────────────┬──────────────────────────────────┐
+--│     name     │               cell               │
+--│   varchar    │          s2_cell_center          │
+--├──────────────┼──────────────────────────────────┤
+--│ Vatican City │ 0/212113230003023131001102313200 │
+--│ San Marino   │ 0/212112131211123020010233101310 │
+--│ Vaduz        │ 2/033031212023000232111020023022 │
+--│ Lobamba      │ 0/331313212213231033112021020221 │
+--│ Luxembourg   │ 2/033022221321121102131101113231 │
+--└──────────────┴──────────────────────────────────┘
+
+-- Use to partition arbitrary lon/lat input
+COPY (
+  SELECT
+    geog.s2_aswkb().s2_arbitrarycellfromwkb().s2_cell_parent(2).s2_cell_token() AS partition_cell,
+    name,
+    geog.s2_aswkb()
+  FROM s2_data_cities()
+) TO 'cities' WITH (FORMAT PARQUET, PARTITION_BY partition_cell);
+
+SELECT * FROM glob('cities/**') LIMIT 5;
+--┌─────────────────────────────────────────┐
+--│                  file                   │
+--│                 varchar                 │
+--├─────────────────────────────────────────┤
+--│ cities/partition_cell=01/data_0.parquet │
+--│ cities/partition_cell=09/data_0.parquet │
+--│ cities/partition_cell=0d/data_0.parquet │
+--│ cities/partition_cell=0f/data_0.parquet │
+--│ cities/partition_cell=11/data_0.parquet │
+--└─────────────────────────────────────────┘
 ```
 
 ### s2_cell_child
@@ -331,8 +379,37 @@ S2_CELL s2_cell_edge_neighbor(cell S2_CELL, index TINYINT)
 
 ### s2_cell_from_token
 
+Parse a hexadecimal token as an S2_CELL.
+
 ```sql
 S2_CELL s2_cell_from_token(text VARCHAR)
+```
+
+#### Description
+
+Note that invalid strings are given an invalid cell value of 0 but do not error.
+To parse the more user-friendly debug string format, cast from `VARCHAR` to
+`S2_CELL`.
+
+#### Example
+
+```sql
+SELECT s2_cell_from_token('4b59a0cd83b5de49');
+--┌────────────────────────────────────────┐
+--│ s2_cell_from_token('4b59a0cd83b5de49') │
+--│                s2_cell                 │
+--├────────────────────────────────────────┤
+--│       2/112230310012123001312232330210 │
+--└────────────────────────────────────────┘
+
+-- Invalid strings don't error but do parse into an invalid cell id
+SELECT s2_cell_from_token('foofy');
+--┌─────────────────────────────┐
+--│ s2_cell_from_token('foofy') │
+--│           s2_cell           │
+--├─────────────────────────────┤
+--│   Invalid: 0000000000000000 │
+--└─────────────────────────────┘
 ```
 
 ### s2_cell_intersects
@@ -343,8 +420,22 @@ BOOLEAN s2_cell_intersects(cell1 S2_CELL, cell2 S2_CELL)
 
 ### s2_cell_level
 
+Extract the level (0-30, inclusive) from an S2_CELL.
+
 ```sql
 TINYINT s2_cell_level(cell S2_CELL)
+```
+
+#### Example
+
+```sql
+SELECT s2_cell_level('5/33120'::S2_CELL);
+--┌───────────────────────────────────────────┐
+--│ s2_cell_level(CAST('5/33120' AS S2_CELL)) │
+--│                   int8                    │
+--├───────────────────────────────────────────┤
+--│                                         5 │
+--└───────────────────────────────────────────┘
 ```
 
 ### s2_cell_parent
@@ -367,34 +458,158 @@ S2_CELL s2_cell_range_min(cell S2_CELL)
 
 ### s2_cell_token
 
+Serialize an S2_CELL as a compact hexadecimal token.
+
 ```sql
 VARCHAR s2_cell_token(cell S2_CELL)
 ```
 
-### s2_cell_vertex
+#### Description
 
-Returns the vertex of the S2 cell.
+To serialize to a more user-friendly (but longer) string, cast an `S2_CELL`
+to `VARCHAR`.
+
+#### Example
 
 ```sql
-GEOGRAPHY s2_cell_vertex(cell_id S2_CELL, vertex_id TINYINT)
+SELECT s2_cell_token(s2_cellfromlonlat(-64, 45));
+--┌───────────────────────────────────────────┐
+--│ s2_cell_token(s2_cellfromlonlat(-64, 45)) │
+--│                  varchar                  │
+--├───────────────────────────────────────────┤
+--│ 4b59a0cd83b5de49                          │
+--└───────────────────────────────────────────┘
+
+SELECT s2_cell_token('5/3301'::S2_CELL);
+--┌──────────────────────────────────────────┐
+--│ s2_cell_token(CAST('5/3301' AS S2_CELL)) │
+--│                 varchar                  │
+--├──────────────────────────────────────────┤
+--│ be3                                      │
+--└──────────────────────────────────────────┘
+```
+
+### s2_cell_vertex
+
+Extract a vertex (corner) of an S2 cell.
+
+```sql
+GEOGRAPHY s2_cell_vertex(cell_id S2_CELL, vertex_id INTEGER)
+```
+
+#### Description
+
+An S2_CELL is represented by an unsigned 64-bit integer but logically
+represents a polygon with four vertices. This function extracts one of them
+according to `vertex_id` (an integer from 0-3).
+
+It is usually more convenient to cast an S2_CELL to GEOGRAPHY or pass an
+S2_CELL directly to a function that accepts a GEOGRAPHY an use the implicit
+conversion.
+
+#### Example
+
+```sql
+SELECT s2_cell_vertex('5/'::S2_CELL, id) as vertex,
+FROM (VALUES (0), (1), (2), (3)) vertices(id);
+
+-- Usually easier to cast to GEOGRAPHY
+SELECT '5/'::S2_CELL::GEOGRAPHY as geog;
+--┌──────────────────────────────────┐
+--│              vertex              │
+--│            geography             │
+--├──────────────────────────────────┤
+--│ POINT (-135 -35.264389682754654) │
+--│ POINT (135 -35.264389682754654)  │
+--│ POINT (45 -35.264389682754654)   │
+--│ POINT (-45 -35.264389682754654)  │
+--└──────────────────────────────────┘
+--┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+--│                                                         geog                                                         │
+--│                                                      geography                                                       │
+--├──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+--│ POLYGON ((-135 -35.264389682754654, -225 -35.264389682754654, -315 -35.264389682754654, -405 -35.264389682754654, …  │
+--└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### s2_cellfromlonlat
 
-Convert a lon/lat pair to S2_CELL_CENTER
+Convert a lon/lat pair to S2_CELL_CENTER.
 
 ```sql
 S2_CELL_CENTER s2_cellfromlonlat(lon DOUBLE, lat DOUBLE)
 ```
 
+#### Description
+
+Cell centers are a highly efficient type for storing point data where a
+precision loss of up to ~2cm is acceptable.
+
+See [`s2_x()`](#s2_x) and [`s2_y()`](#s2_y) for the reverse operation.
+
+#### Example
+
+```sql
+SELECT s2_cellfromlonlat(-64, 45);
+--┌──────────────────────────────────┐
+--│    s2_cellfromlonlat(-64, 45)    │
+--│          s2_cell_center          │
+--├──────────────────────────────────┤
+--│ 2/112230310012123001312232330210 │
+--└──────────────────────────────────┘
+
+SELECT name, s2_cellfromlonlat(s2_x(geog), s2_y(geog)) as cell
+FROM s2_data_cities()
+LIMIT 5;
+--┌──────────────┬──────────────────────────────────┐
+--│     name     │               cell               │
+--│   varchar    │          s2_cell_center          │
+--├──────────────┼──────────────────────────────────┤
+--│ Vatican City │ 0/212113230003023131001102313200 │
+--│ San Marino   │ 0/212112131211123020010233101310 │
+--│ Vaduz        │ 2/033031212023000232111020023022 │
+--│ Lobamba      │ 0/331313212213231033112021020221 │
+--│ Luxembourg   │ 2/033022221321121102131101113231 │
+--└──────────────┴──────────────────────────────────┘
+```
+
 ### s2_cellfromwkb
 
-Convert a WKB point directly to S2_CELL_CENTER
+Convert a WKB point directly to S2_CELL_CENTER.
 
 ```sql
 S2_CELL_CENTER s2_cellfromwkb(wkb BLOB)
 ```
 
+#### Description
+
+This is the same as `s2_geogfromwkb()::S2_CELL_CENTER` but does the parsing
+directly to maximize performance. Cell centers are a highly efficient type
+for storing point data where a precision loss of up to ~2cm is acceptable;
+this function exists to ensure getting data into this format is as easy as
+possible.
+
+This function assumes the input WKB contains longitude/latitude coordinates
+and will error for any input that is not a POINT or MULTIPOINT with exactly
+one point.
+
+#### Example
+
+```sql
+SELECT name, s2_cellfromwkb(s2_aswkb(geog)) as cell
+FROM s2_data_cities()
+LIMIT 5;
+--┌──────────────┬──────────────────────────────────┐
+--│     name     │               cell               │
+--│   varchar    │          s2_cell_center          │
+--├──────────────┼──────────────────────────────────┤
+--│ Vatican City │ 0/212113230003023131001102313200 │
+--│ San Marino   │ 0/212112131211123020010233101310 │
+--│ Vaduz        │ 2/033031212023000232111020023022 │
+--│ Lobamba      │ 0/331313212213231033112021020221 │
+--│ Luxembourg   │ 2/033022221321121102131101113231 │
+--└──────────────┴──────────────────────────────────┘
+```
 ## Conversion
 
 ### s2_astext
