@@ -151,8 +151,15 @@ struct S2DataScalar {
         variant.SetFunction(ExecuteFn);
       });
 
-      // TODO: Example
-      // TODO: Description
+      func.SetDescription(R"(
+Get an example city or country from [`s2_data_cities()`](#s2_data_cities)
+or [`s2_data_countries()`](#s2_data_countries) by name.
+)");
+      func.SetExample(R"(
+SELECT s2_data_city('Toronto') as city;
+----
+SELECT s2_data_country('Fiji') as country;
+)");
 
       func.SetTag("ext", "geography");
       func.SetTag("category", "data");

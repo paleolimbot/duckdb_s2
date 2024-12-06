@@ -58,7 +58,19 @@ struct S2Area {
         variant.SetFunction(ExecuteFn);
       });
 
-      func.SetDescription("Returns the area of the geography.");
+      func.SetDescription(R"(
+Calculate the area of the geography in square meters.
+
+The returned area is in square meters as approximated as the area of the polygon
+on a perfect sphere.
+
+For non-polygon geographies, `s2_area()` returns `0.0`.
+)");
+      func.SetExample(R"(
+SELECT s2_area(s2_data_country('Fiji')) AS area;
+----
+SELECT s2_area('POINT (0 0)'::GEOGRAPHY) AS area;
+)");
 
       func.SetTag("ext", "geography");
       func.SetTag("category", "accessors");
@@ -105,7 +117,21 @@ struct S2Perimieter {
             variant.SetFunction(ExecuteFn);
           });
 
-          func.SetDescription("Returns the perimeter of the geography.");
+          func.SetDescription(R"(
+Calculate the perimeter of the geography in meters.
+
+The returned length is in meters as approximated as the perimeter of the polygon
+on a perfect sphere.
+
+For non-polygon geographies, `s2_perimeter()` returns `0.0`. For a  polygon with
+more than one ring, this function returns the sum of the perimeter of all
+rings.
+)");
+          func.SetExample(R"(
+SELECT s2_perimeter(s2_data_country('Fiji')) AS perimeter;
+----
+SELECT s2_perimeter('POINT (0 0)'::GEOGRAPHY) AS perimeter;
+)");
 
           func.SetTag("ext", "geography");
           func.SetTag("category", "accessors");
@@ -150,7 +176,18 @@ struct S2Length {
             variant.SetFunction(ExecuteFn);
           });
 
-          func.SetDescription("Returns the length of the geography.");
+          func.SetDescription(R"(
+Calculate the length of the geography in meters.
+
+For non-linestring or multilinestring geographies, `s2_length()` returns `0.0`.
+)");
+          func.SetExample(R"(
+SELECT s2_length('POINT (0 0)'::GEOGRAPHY) AS length;
+----
+SELECT s2_length('LINESTRING (0 0, -64 45)'::GEOGRAPHY) AS length;
+----
+SELECT s2_length(s2_data_country('Canada')) AS length;
+)");
 
           func.SetTag("ext", "geography");
           func.SetTag("category", "accessors");
@@ -195,7 +232,15 @@ struct S2XY {
         variant.SetFunction(ExecuteFnX);
       });
 
-      func.SetDescription("Returns the x coordinate of the geography.");
+      func.SetDescription(R"(
+Extract the longitude of a point geography.
+
+For geographies that are not a single point, `NaN` is returned.
+)");
+
+      func.SetExample(R"(
+SELECT s2_x('POINT (-64 45)'::GEOGRAPHY);
+)");
 
       func.SetTag("ext", "geography");
       func.SetTag("category", "accessors");
@@ -208,7 +253,15 @@ struct S2XY {
         variant.SetFunction(ExecuteFnY);
       });
 
-      func.SetDescription("Returns the y coordinate of the geography.");
+      func.SetDescription(R"(
+Extract the latitude of a point geography.
+
+For geographies that are not a single point, `NaN` is returned.
+)");
+
+      func.SetExample(R"(
+SELECT s2_y('POINT (-64 45)'::GEOGRAPHY);
+)");
 
       func.SetTag("ext", "geography");
       func.SetTag("category", "accessors");

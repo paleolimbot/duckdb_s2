@@ -182,8 +182,24 @@ struct S2CellCenterFromWKB {
             variant.SetFunction(ExecutePointFn);
           });
 
-          func.SetDescription("Convert a WKB point directly to S2_CELL_CENTER");
-          // TODO: Example
+          func.SetDescription(R"(
+Convert a WKB point directly to S2_CELL_CENTER.
+
+This is the same as `s2_geogfromwkb()::S2_CELL_CENTER` but does the parsing
+directly to maximize performance. Cell centers are a highly efficient type
+for storing point data where a precision loss of up to ~2cm is acceptable;
+this function exists to ensure getting data into this format is as easy as
+possible.
+
+This function assumes the input WKB contains longitude/latitude coordinates
+and will error for any input that is not a POINT or MULTIPOINT with exactly
+one point.
+)");
+          func.SetExample(R"(
+SELECT name, s2_cellfromwkb(s2_aswkb(geog)) as cell
+FROM s2_data_cities()
+LIMIT 5;
+)");
 
           func.SetTag("ext", "geography");
           func.SetTag("category", "cellops");
@@ -197,8 +213,32 @@ struct S2CellCenterFromWKB {
             variant.SetFunction(ExecuteArbitraryFn);
           });
 
-          func.SetDescription("Convert the first vertex to S2_CELL_CENTER for sorting.");
-          // TODO: Example
+          func.SetDescription(R"(
+Get an arbitrary S2_CELL_CENTER on or near the input.
+
+This function parses the minimum required WKB input to obtain the first
+longitude/latitude pair it sees and finds the closest S2_CELL_CENTER. This
+is useful for sorting or partitioning of lon/lat input when there is no need
+to create a GEOGRAPHY.
+
+Note that longitude/latitude is assumed in the input.
+)");
+          func.SetExample(R"(
+SELECT name, s2_arbitrarycellfromwkb(s2_aswkb(geog)) AS cell
+FROM s2_data_cities()
+LIMIT 5;
+----
+-- Use to partition arbitrary lon/lat input
+COPY (
+  SELECT
+    geog.s2_aswkb().s2_arbitrarycellfromwkb().s2_cell_parent(2).s2_cell_token() AS partition_cell,
+    name,
+    geog.s2_aswkb()
+  FROM s2_data_cities()
+) TO 'cities' WITH (FORMAT PARQUET, PARTITION_BY partition_cell);
+
+SELECT * FROM glob('cities/**') LIMIT 5;
+)");
 
           func.SetTag("ext", "geography");
           func.SetTag("category", "cellops");
@@ -432,8 +472,21 @@ struct S2CellCenterFromLonLat {
             variant.SetFunction(ExecuteFn);
           });
 
-          func.SetDescription("Convert a lon/lat pair to S2_CELL_CENTER");
-          // TODO: Example
+          func.SetDescription(R"(
+Convert a lon/lat pair to S2_CELL_CENTER.
+
+Cell centers are a highly efficient type for storing point data where a
+precision loss of up to ~2cm is acceptable.
+
+See [`s2_x()`](#s2_x) and [`s2_y()`](#s2_y) for the reverse operation.
+)");
+          func.SetExample(R"(
+SELECT s2_cellfromlonlat(-64, 45);
+----
+SELECT name, s2_cellfromlonlat(s2_x(geog), s2_y(geog)) as cell
+FROM s2_data_cities()
+LIMIT 5;
+)");
 
           func.SetTag("ext", "geography");
           func.SetTag("category", "cellops");
@@ -529,13 +582,30 @@ struct S2CellVertex {
         instance, "s2_cell_vertex", [](ScalarFunctionBuilder& func) {
           func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
             variant.AddParameter("cell_id", Types::S2_CELL());
-            variant.AddParameter("vertex_id", LogicalType::TINYINT);
+            variant.AddParameter("vertex_id", LogicalType::INTEGER);
             variant.SetReturnType(Types::GEOGRAPHY());
             variant.SetFunction(Execute);
           });
 
-          func.SetDescription("Returns the vertex of the S2 cell.");
-          // TODO: Example
+          func.SetDescription(R"(
+Extract a vertex (corner) of an S2 cell.
+
+An S2_CELL is represented by an unsigned 64-bit integer but logically
+represents a polygon with four vertices. This function extracts one of them
+according to `vertex_id` (an integer from 0-3).
+
+It is usually more convenient to cast an S2_CELL to GEOGRAPHY or pass an
+S2_CELL directly to a function that accepts a GEOGRAPHY an use the implicit
+conversion.
+)");
+          func.SetExample(R"(
+SELECT s2_cell_vertex('5/'::S2_CELL, id) as vertex,
+FROM (VALUES (0), (1), (2), (3)) vertices(id);
+----
+
+-- Usually easier to cast to GEOGRAPHY
+SELECT '5/'::S2_CELL::GEOGRAPHY as geog;
+)");
 
           func.SetTag("ext", "geography");
           func.SetTag("category", "cellops");
@@ -547,10 +617,10 @@ struct S2CellVertex {
     s2geography::op::cell::CellVertex op;
     GeographyEncoder encoder;
 
-    BinaryExecutor::Execute<int64_t, uint8_t, string_t>(
+    BinaryExecutor::Execute<int64_t, int32_t, string_t>(
         args.data[0], args.data[1], result, args.size(),
-        [&](int64_t cell_id, int8_t vertex_id) {
-          Point pt = op.ExecuteScalar(cell_id, vertex_id);
+        [&](int64_t cell_id, int32_t vertex_id) {
+          Point pt = op.ExecuteScalar(cell_id, static_cast<int8_t>(vertex_id));
           s2geography::PointGeography geog({pt[0], pt[1], pt[2]});
           return StringVector::AddStringOrBlob(result, encoder.Encode(geog));
         });
@@ -559,22 +629,6 @@ struct S2CellVertex {
 
 template <typename Op>
 struct S2CellToString {
-  static void Register(DatabaseInstance& instance, const char* name) {
-    FunctionBuilder::RegisterScalar(instance, name, [](ScalarFunctionBuilder& func) {
-      func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
-        variant.AddParameter("cell", Types::S2_CELL());
-        variant.SetReturnType(LogicalType::VARCHAR);
-        variant.SetFunction(ExecuteFn);
-      });
-
-      // TODO: Description
-      // TODO: Example
-
-      func.SetTag("ext", "geography");
-      func.SetTag("category", "cellops");
-    });
-  }
-
   static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
     return Execute(args.data[0], result, args.size());
   }
@@ -595,24 +649,37 @@ struct S2CellToString {
   }
 };
 
+struct S2CellToToken {
+  static void Register(DatabaseInstance& instance) {
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_cell_token", [](ScalarFunctionBuilder& func) {
+          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("cell", Types::S2_CELL());
+            variant.SetReturnType(LogicalType::VARCHAR);
+            variant.SetFunction(
+                S2CellToString<s2geography::op::cell::ToToken>::ExecuteFn);
+          });
+
+          func.SetDescription(R"(
+Serialize an S2_CELL as a compact hexadecimal token.
+
+To serialize to a more user-friendly (but longer) string, cast an `S2_CELL`
+to `VARCHAR`.
+)");
+          func.SetExample(R"(
+SELECT s2_cell_token(s2_cellfromlonlat(-64, 45));
+----
+SELECT s2_cell_token('5/3301'::S2_CELL);
+)");
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "cellops");
+        });
+  }
+};
+
 template <typename Op>
 struct S2CellFromString {
-  static void Register(DatabaseInstance& instance, const char* name) {
-    FunctionBuilder::RegisterScalar(instance, name, [](ScalarFunctionBuilder& func) {
-      func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
-        variant.AddParameter("text", LogicalType::VARCHAR);
-        variant.SetReturnType(Types::S2_CELL());
-        variant.SetFunction(ExecuteFn);
-      });
-
-      // TODO: Description
-      // TODO: Example
-
-      func.SetTag("ext", "geography");
-      func.SetTag("category", "cellops");
-    });
-  }
-
   static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
     return Execute(args.data[0], result, args.size());
   }
@@ -632,53 +699,61 @@ struct S2CellFromString {
   }
 };
 
-template <typename Op>
-struct S2CellToDouble {
-  static void Register(DatabaseInstance& instance, const char* name) {
-    FunctionBuilder::RegisterScalar(instance, name, [](ScalarFunctionBuilder& func) {
-      func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
-        variant.AddParameter("cell", Types::S2_CELL());
-        variant.SetReturnType(LogicalType::DOUBLE);
-        variant.SetFunction(Execute);
-      });
+struct S2CellFromToken {
+  static void Register(DatabaseInstance& instance) {
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_cell_from_token", [](ScalarFunctionBuilder& func) {
+          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("text", LogicalType::VARCHAR);
+            variant.SetReturnType(Types::S2_CELL());
+            variant.SetFunction(
+                S2CellFromString<s2geography::op::cell::FromToken>::ExecuteFn);
+          });
 
-      // TODO: Description
-      // TODO: Example
+          func.SetDescription(R"(
+Parse a hexadecimal token as an S2_CELL.
 
-      func.SetTag("ext", "geography");
-      func.SetTag("category", "cellops");
-    });
-  }
+Note that invalid strings are given an invalid cell value of 0 but do not error.
+To parse the more user-friendly debug string format, cast from `VARCHAR` to
+`S2_CELL`.
+)");
+          func.SetExample(R"(
+SELECT s2_cell_from_token('4b59a0cd83b5de49');
+----
+-- Invalid strings don't error but do parse into an invalid cell id
+SELECT s2_cell_from_token('foofy');
+)");
 
-  static inline void Execute(DataChunk& args, ExpressionState& state, Vector& result) {
-    Op op;
-    UnaryExecutor::Execute<int64_t, double>(
-        args.data[0], result, args.size(),
-        [&](int64_t arg0) { return op.ExecuteScalar(arg0); });
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "cellops");
+        });
   }
 };
 
-template <typename Op>
-struct S2CellToInt8 {
-  static void Register(DatabaseInstance& instance, const char* name,
-                       LogicalType arg_type) {
-    FunctionBuilder::RegisterScalar(instance, name, [&](ScalarFunctionBuilder& func) {
-      func.AddVariant([&](ScalarFunctionVariantBuilder& variant) {
-        variant.AddParameter("cell", arg_type);
-        variant.SetReturnType(LogicalType::TINYINT);
-        variant.SetFunction(Execute);
-      });
+struct S2CellLevel {
+  static void Register(DatabaseInstance& instance) {
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_cell_level", [&](ScalarFunctionBuilder& func) {
+          func.AddVariant([&](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("cell", Types::S2_CELL());
+            variant.SetReturnType(LogicalType::TINYINT);
+            variant.SetFunction(Execute);
+          });
 
-      // TODO: Description
-      // TODO: Example
+          func.SetDescription(R"(
+Extract the level (0-30, inclusive) from an S2_CELL.
+)");
+          func.SetExample(R"(
+SELECT s2_cell_level('5/33120'::S2_CELL);
+)");
 
-      func.SetTag("ext", "geography");
-      func.SetTag("category", "cellops");
-    });
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "cellops");
+        });
   }
 
   static inline void Execute(DataChunk& args, ExpressionState& state, Vector& result) {
-    Op op;
+    s2geography::op::cell::Level op;
     UnaryExecutor::Execute<int64_t, int8_t>(
         args.data[0], result, args.size(),
         [&](int64_t arg0) { return op.ExecuteScalar(arg0); });
@@ -687,22 +762,6 @@ struct S2CellToInt8 {
 
 template <typename Op>
 struct S2BinaryCellPredicate {
-  static void Register(DatabaseInstance& instance, const char* name) {
-    FunctionBuilder::RegisterScalar(instance, name, [&](ScalarFunctionBuilder& func) {
-      func.AddVariant([&](ScalarFunctionVariantBuilder& variant) {
-        variant.AddParameter("cell1", Types::S2_CELL());
-        variant.AddParameter("cell2", Types::S2_CELL());
-        variant.SetReturnType(LogicalType::BOOLEAN);
-        variant.SetFunction(Execute);
-      });
-      // TODO: Description
-      // TODO: Example
-
-      func.SetTag("ext", "geography");
-      func.SetTag("category", "cellops");
-    });
-  }
-
   static inline void Execute(DataChunk& args, ExpressionState& state, Vector& result) {
     Op op;
     BinaryExecutor::Execute<int64_t, int64_t, bool>(
@@ -711,30 +770,163 @@ struct S2BinaryCellPredicate {
   }
 };
 
+struct S2CellIntersects {
+  static void Register(DatabaseInstance& instance) {
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_cell_intersects", [&](ScalarFunctionBuilder& func) {
+          func.AddVariant([&](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("cell1", Types::S2_CELL());
+            variant.AddParameter("cell2", Types::S2_CELL());
+            variant.SetReturnType(LogicalType::BOOLEAN);
+            variant.SetFunction(
+                S2BinaryCellPredicate<s2geography::op::cell::MayIntersect>::Execute);
+          });
+
+          func.SetDescription(R"(
+Return true if `cell1` contains `cell2` or `cell2` contains `cell1`.
+
+See [`s2_cell_range_min()`](#s2_cell_range_min) and [`s2_cell_range_max()`](#s2_cell_range_max)
+for how to calculate this in a way that DuckDB can use to accelerate a join.
+
+Note that this will return false for neighboring cells. Use [`s2_intersects()`](#s2_intersects)
+if you need this type of intersection check.
+)");
+          func.SetExample(R"(
+SELECT s2_cell_intersects('5/3'::S2_CELL, '5/30'::S2_CELL) AS result;
+----
+SELECT s2_cell_intersects('5/30'::S2_CELL, '5/3'::S2_CELL) AS result;
+)");
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "cellops");
+        });
+  }
+};
+
+struct S2CellContains {
+  static void Register(DatabaseInstance& instance) {
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_cell_contains", [&](ScalarFunctionBuilder& func) {
+          func.AddVariant([&](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("cell1", Types::S2_CELL());
+            variant.AddParameter("cell2", Types::S2_CELL());
+            variant.SetReturnType(LogicalType::BOOLEAN);
+            variant.SetFunction(
+                S2BinaryCellPredicate<s2geography::op::cell::Contains>::Execute);
+          });
+
+          func.SetDescription(R"(
+Return true if `cell1` contains `cell2`.
+
+See [`s2_cell_range_min()`](#s2_cell_range_min) and [`s2_cell_range_max()`](#s2_cell_range_max)
+for how to calculate this in a way that DuckDB can use to accelerate a join.
+)");
+          func.SetExample(R"(
+SELECT s2_cell_contains('5/3'::S2_CELL, '5/30'::S2_CELL) AS result;
+----
+SELECT s2_cell_contains('5/30'::S2_CELL, '5/3'::S2_CELL) AS result;
+)");
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "cellops");
+        });
+  }
+};
+
 template <typename Op>
 struct S2CellToCell {
-  static void Register(DatabaseInstance& instance, const char* name) {
-    FunctionBuilder::RegisterScalar(instance, name, [&](ScalarFunctionBuilder& func) {
-      func.AddVariant([&](ScalarFunctionVariantBuilder& variant) {
-        variant.AddParameter("cell", Types::S2_CELL());
-        variant.AddParameter("index", LogicalType::TINYINT);
-        variant.SetReturnType(Types::S2_CELL());
-        variant.SetFunction(Execute);
-      });
-
-      // TODO: Description
-      // TODO: Example
-
-      func.SetTag("ext", "geography");
-      func.SetTag("category", "cellops");
-    });
-  }
-
   static inline void Execute(DataChunk& args, ExpressionState& state, Vector& result) {
     Op op;
-    BinaryExecutor::Execute<int64_t, int8_t, int64_t>(
-        args.data[0], args.data[1], result, args.size(), [&](int64_t arg0, int8_t arg1) {
-          return static_cast<int64_t>(op.ExecuteScalar(arg0, arg1));
+    BinaryExecutor::Execute<int64_t, int32_t, int64_t>(
+        args.data[0], args.data[1], result, args.size(), [&](int64_t arg0, int32_t arg1) {
+          return static_cast<int64_t>(op.ExecuteScalar(arg0, static_cast<int8_t>(arg1)));
+        });
+  }
+};
+
+struct S2CellChild {
+  static void Register(DatabaseInstance& instance) {
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_cell_child", [&](ScalarFunctionBuilder& func) {
+          func.AddVariant([&](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("cell", Types::S2_CELL());
+            variant.AddParameter("index", LogicalType::INTEGER);
+            variant.SetReturnType(Types::S2_CELL());
+            variant.SetFunction(S2CellToCell<s2geography::op::cell::Child>::Execute);
+          });
+
+          func.SetDescription(R"(
+Compute a child S2_CELL.
+
+Each S2_CELL that is not a leaf cell (level 30) has exactly four children
+(index 0-3 inclusive). Values for `index` outside this range will result in
+an invalid returned cell.
+)");
+          func.SetExample(R"(
+SELECT s2_cell_child('5/00000'::S2_CELL, ind) as cell
+FROM (VALUES (0), (1), (2), (3), (4)) indices(ind);
+)");
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "cellops");
+        });
+  }
+};
+
+struct S2CellParent {
+  static void Register(DatabaseInstance& instance) {
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_cell_parent", [&](ScalarFunctionBuilder& func) {
+          func.AddVariant([&](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("cell", Types::S2_CELL());
+            variant.AddParameter("level", LogicalType::INTEGER);
+            variant.SetReturnType(Types::S2_CELL());
+            variant.SetFunction(S2CellToCell<s2geography::op::cell::Parent>::Execute);
+          });
+
+          func.SetDescription(R"(
+Compute a parent S2_CELL.
+
+Note that level is clamped to the valid range 0-30. A negative value will
+be subtracted from the current level (e.g., use `-1` for the immediate parent).
+)");
+          func.SetExample(R"(
+SELECT s2_cell_parent(s2_cellfromlonlat(-64, 45), level) as cell
+FROM (VALUES (0), (1), (2), (3), (4), (5), (-1), (-2)) levels(level);
+)");
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "cellops");
+        });
+  }
+};
+
+struct S2CellEdgeNeighbor {
+  static void Register(DatabaseInstance& instance) {
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_cell_edge_neighbor", [&](ScalarFunctionBuilder& func) {
+          func.AddVariant([&](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("cell", Types::S2_CELL());
+            variant.AddParameter("index", LogicalType::INTEGER);
+            variant.SetReturnType(Types::S2_CELL());
+            variant.SetFunction(
+                S2CellToCell<s2geography::op::cell::EdgeNeighbor>::Execute);
+          });
+
+          func.SetDescription(R"(
+Compute a neighbor S2_CELL.
+
+Every S2_CELL has a neighbor at the top, left, right, and bottom,
+which can be selected from index values 0-3 (inclusive). Values of
+`index` outside this range will result in an invalid returned cell value.
+)");
+          func.SetExample(R"(
+SELECT s2_cell_edge_neighbor('5/00000'::S2_CELL, ind) as cell
+FROM (VALUES (0), (1), (2), (3), (4)) indices(ind);
+)");
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "cellops");
         });
   }
 };
@@ -749,8 +941,14 @@ struct S2CellBounds {
             variant.SetFunction(ExecuteRangeMin);
           });
 
-          // TODO: Description
-          // TODO: Example
+          func.SetDescription(R"(
+Compute the minimum leaf cell value contained within an S2_CELL.
+)");
+          func.SetExample(R"(
+SELECT
+  s2_cell_range_min('5/00000'::S2_CELL) AS cell_min,
+  s2_cell_range_max('5/00000'::S2_CELL) AS cell_max;
+)");
 
           func.SetTag("ext", "geography");
           func.SetTag("category", "cellops");
@@ -764,8 +962,14 @@ struct S2CellBounds {
             variant.SetFunction(ExecuteRangeMax);
           });
 
-          // TODO: Description
-          // TODO: Example
+          func.SetDescription(R"(
+Compute the maximum leaf cell value contained within an S2_CELL.
+)");
+          func.SetExample(R"(
+SELECT
+  s2_cell_range_min('5/00000'::S2_CELL) AS cell_min,
+  s2_cell_range_max('5/00000'::S2_CELL) AS cell_max;
+)");
 
           func.SetTag("ext", "geography");
           func.SetTag("category", "cellops");
@@ -869,19 +1073,21 @@ void RegisterS2CellOps(DatabaseInstance& instance) {
 
   S2CellCenterFromWKB::Register(instance);
   S2CellCenterFromLonLat::Register(instance);
-  S2CellToString<ToToken>::Register(instance, "s2_cell_token");
-  S2CellFromString<FromToken>::Register(instance, "s2_cell_from_token");
+  S2CellToToken::Register(instance);
+  S2CellFromToken::Register(instance);
 
-  S2CellToInt8<Level>::Register(instance, "s2_cell_level", Types::S2_CELL());
+  S2CellLevel::Register(instance);
 
   S2CellVertex::Register(instance);
 
-  S2BinaryCellPredicate<Contains>::Register(instance, "s2_cell_contains");
-  S2BinaryCellPredicate<MayIntersect>::Register(instance, "s2_cell_intersects");
-  S2CellToCell<Child>::Register(instance, "s2_cell_child");
-  S2CellToCell<Parent>::Register(instance, "s2_cell_parent");
+  S2CellContains::Register(instance);
+  S2CellIntersects::Register(instance);
+
+  S2CellChild::Register(instance);
+  S2CellParent::Register(instance);
+  S2CellEdgeNeighbor::Register(instance);
+
   S2CellBounds::Register(instance);
-  S2CellToCell<EdgeNeighbor>::Register(instance, "s2_cell_edge_neighbor");
 }
 
 }  // namespace duckdb_s2

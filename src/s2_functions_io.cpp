@@ -73,8 +73,21 @@ struct S2AsText {
             variant.SetFunction(ExecuteFn);
           });
 
-          func.SetDescription("Returns the WKT string of the geography.");
-          // TODO: Example
+          func.SetDescription(R"(
+Returns the well-known text (WKT) string of the geography.
+
+Note that because the internal representation of the GEOGRAPHY type is either
+an S2_CELL_CENTER or a unit vector, WKT typically does not roundtrip through a
+GEOGRAPHY unless the output is rounded using `[s2_format()`][#s2_format].
+
+The output contains spherical edges. If edges are large and the consumer does
+not know that the edges are spherical, this may cause issues.
+
+Calling this function has the same effect as casting to VARCHAR.
+)");
+          func.SetExample(R"(
+SELECT s2_astext(s2_data_city('Vancouver'));
+)");
 
           func.SetTag("ext", "geography");
           func.SetTag("category", "conversion");
@@ -90,8 +103,15 @@ struct S2AsText {
           });
 
           func.SetDescription(
-              "Returns the WKT string of the geography with a given precision.");
-          // TODO: Example
+              R"(
+Returns the WKT string of the geography with a given precision.
+
+See [`s2_astext()`](#s2_text) for parameter-free lossless output. Like `s2_text()`,
+this function exports spherical edges.
+)");
+          func.SetExample(R"(
+SELECT s2_format(s2_data_city('Vancouver'), 1);
+)");
 
           func.SetTag("ext", "geography");
           func.SetTag("category", "conversion");
@@ -152,8 +172,17 @@ struct S2GeogFromWKB {
             variant.SetFunction(ExecuteFn);
           });
 
-          func.SetDescription("Converts a WKB blob to a geography.");
-          // TODO: Example
+          func.SetDescription(R"(
+Converts a WKB blob to a geography.
+
+The input WKB blog is assumed to have longitude/latitude coordinates and have
+spherical edges. If edges are long and the input had a different edge type,
+the resulting GEOGRAPHY may be invalid or represent a different location than
+intended.
+)");
+          func.SetExample(R"(
+SELECT s2_geogfromwkb(s2_aswkb(s2_data_city('Toronto'))) as geog;
+)");
 
           func.SetTag("ext", "geography");
           func.SetTag("category", "conversion");
@@ -186,8 +215,19 @@ struct S2AsWKB {
             variant.SetFunction(ExecuteFn);
           });
 
-          func.SetDescription("Returns the WKB blob of the geography.");
-          // TODO: Example
+          func.SetDescription(R"(
+Serialize a GEOGRAPHY as well-known binary (WKB).
+
+Note that because the internal representation of the GEOGRAPHY type is either
+an S2_CELL_CENTER or a unit vector, WKB typically does not roundtrip through a
+GEOGRAPHY.
+
+The output contains spherical edges. If edges are large and the consumer does
+not know that the edges are spherical, this may cause issues.
+)");
+          func.SetExample(R"(
+SELECT s2_aswkb(s2_data_city('Toronto')) as wkb;
+)");
 
           func.SetTag("ext", "geography");
           func.SetTag("category", "conversion");
@@ -220,8 +260,29 @@ struct S2GeogPrepare {
           });
 
           func.SetDescription(
-              "Prepares a geography for faster predicate and overlay operations.");
-          // TODO: Example
+              R"(
+Prepares a geography for faster predicate and overlay operations.
+
+For advanced users, this is useful for preparing input that will be subject
+to a large number of intersection or containment checks. This high level terms,
+this operation builds a cell-based index on the edges of the geography that
+would otherwise have to occur on every intersection check.
+
+This function returns its input for very small geographies (e.g., points)
+that do not benefit from this operation.
+)");
+          func.SetExample(R"(
+SELECT s2_prepare(s2_data_country('Fiji'));
+----
+CREATE TABLE countries AS
+SELECT name, s2_prepare(geog) as geog
+FROM s2_data_countries();
+
+SELECT cities.name as city, countries.name as country
+FROM s2_data_cities() AS cities
+INNER JOIN countries ON s2_contains(countries.geog, cities.geog)
+LIMIT 5;
+)");
 
           func.SetTag("ext", "geography");
           func.SetTag("category", "conversion");

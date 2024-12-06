@@ -6,7 +6,7 @@ This repository is based on https://github.com/duckdb/extension-template, check 
 
 This extension, geography, allows you leverage [Google's s2geometry library](https://github.com/google/s2geometry) via the [s2geography wrapper library](https://github.com/paleolimbot/s2geography) that also powers S2 integration as an [R package](https://r-spatial.github.io/s2) and a [Python library](https://github.com/benbovy/spherely). It is preliminary and not currently published as a community extension.
 
-In general, the functions are the same as those implemented in the [spatial extension](https://duckdb.org/docs/extensions/spatial/functions.html) except they are prefixed with `s2_` instead of `st_`.
+In general, the functions are the same as those implemented in the [spatial extension](https://duckdb.org/docs/extensions/spatial/functions.html) except they are prefixed with `s2_` instead of `st_`. See [the function reference](docs/function-reference.md) for a complete list with documentation.
 
 ```
 LOAD geography;
@@ -126,84 +126,15 @@ The geography extension defines the following types:
 
 ## Functions
 
-Currently implemented functions are listed below. Documentation is a work in progress!
+Currently implemented functions are listed in the
+[function reference](docs/function-reference.md). Documentation is a work in progress!
 Note that all types listed above are implicitly castable to `GEOGRAPHY` such that
 you can use them with any function that accepts a `GEOGRAPHY`. In general, functions
 are intended to have the same behaviour as the equivalent `ST_xx()` function
 (if it exists).
 
-Documentation is a work in progress! If you need a function that is missing, open
-an issue (most functions have already been ported to the underlying C++ library
-and just aren't wired up to DuckDB yet).
-
-### Test data
-
-You can use the table functions `s2_data_cities()` and `s2_data_countries()` to
-load tables useful for testing. You can also use `s2_data_city('<city name>')` and
-`s2_data_country('<country name>')` to get a scalar `GEOGRAPHY`.
-
-### Geography accessors
-
-Note that areas, lengths, and distances are currently spherical approximations
-(i.e., do not take into account the WGS84 ellipsoid).
-
-- `s2_isempty(GEOGRAPHY)`
-- `s2_area(GEOGRAPHY)`
-- `s2_perimeter(GEOGRAPHY)`
-- `s2_length(GEOGRAPHY)`
-- `s2_x(GEOGRAPHY)`
-- `s2_y(GEOGRAPHY)`
-
-### Input/output
-
-- `s2_geogfromwkb(BLOB)`
-- `s2_aswkb(GEOGRAPHY)`
-- `CAST(VARCHAR AS GEOGRAPHY)` (e.g., `'POINT (-64 45)::GEOGRAPHY`).
-- `CAST(GEOGRAPHY AS VARCHAR)` (e.g., `'POINT (-64 45)::GEOGRAPHY::VARCHAR`).
-- `s2_format(GEOGRAPHY, INTEGER)` (WKT export with trimmed precision)
-- `s2_prepare(GEOGRAPHY)`: Builds an internal index representationthat can
-  be efficiently reused for multiple comparisons.
-
-### Geography predicates
-
-Note that predicate operations need to build an edge index for each
-geography for every comparison. If you suspect you will need to perform
-many comparisons against a single geography (e.g., point in polygon in
-a join), you can use `CREATE TABLE ... AS SELECT s2_prepare(geog) FROM ...`
-to avoid a costly recomputation of the index for each element.
-
-- `s2_mayintersect(GEOGRAPHY, GEOGRAPHY)`
-- `s2_intersects(GEOGRAPHY, GEOGRAPHY)`
-- `s2_contains(GEOGRAPHY, GEOGRAPHY)`
-- `s2_equals(GEOGRAPHY, GEOGRAPHY)`
-
-### Overlay operations
-
-- `s2_intersects(GEOGRAPHY, GEOGRAPHY)`
-- `s2_difference(GEOGRAPHY, GEOGRAPHY)`
-- `s2_union(GEOGRAPHY, GEOGRAPHY)`
-
-### Bounds
-
-- `s2_covering(GEOGRAPHY)`
-
-### Cell operators
-
-- `s2_cellfromwkb(BLOB)`: import WKB directly to S2_CELL_CENTER
-- `s2_arbitrarycellfromwkb(BLOB)`: convert the first vertex to S2_CELL_CENTER for sorting
-- `s2_cellfromlonlat()`
-- `s2_cell_from_token(VARCHAR)`
-- `s2_cell_token(S2_CELL)`
-- `s2_cell_level(S2_CELL)`
-- `s2_cell_parent(S2_CELL, INTEGER)`
-- `s2_cell_child(S2_CELL, INTEGER)`
-- `s2_cell_edge_neighbor(S2_CELL, INTEGER)`
-- `s2_cell_contains(S2_CELL, S2_CELL)`
-- `s2_cell_intersects(S2_CELL, S2_CELL)`
-
-### Version information
-
-- `s2_dependencies()`
+If you need a function that is missing, open an issue (most functions have already
+been ported to the underlying C++ library and just aren't wired up to DuckDB yet).
 
 ## Building
 
@@ -255,6 +186,9 @@ cp CMakeUserPresets.json duckdb/
 
 Then choose *Developer: Reload window* from the command palette and choose the
 *Extension (Debug build)* preset.
+
+See the [README in the docs directory](docs/README.md) for instructions to build
+the documentation.
 
 ## Running the extension
 
