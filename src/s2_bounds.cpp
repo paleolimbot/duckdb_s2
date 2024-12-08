@@ -230,19 +230,35 @@ SELECT s2_bounds_rect(s2_data_country('Fiji')) as rect;
   }
 };
 
+// Needs to be trivially everythingable, so we can't just use S2LatLngRect
 struct BoundsAggState {
-  S2LatLngRect rect;
+  R1Interval lat;
+  S1Interval lng;
+
+  void Init() {
+    auto rect = S2LatLngRect::Empty();
+    lat = rect.lat();
+    lng = rect.lng();
+  }
+
+  void Union(const S2LatLngRect& other) {
+    auto rect = S2LatLngRect(lat, lng).Union(other);
+    lat = rect.lat();
+    lng = rect.lng();
+  }
+
+  void Union(const BoundsAggState& other) { Union(S2LatLngRect(other.lat, other.lng)); }
 };
 
 struct S2BoundsRectAgg {
   template <class STATE>
   static void Initialize(STATE& state) {
-    state.rect = S2LatLngRect::Empty();
+    state.Init();
   }
 
   template <class STATE, class OP>
   static void Combine(const STATE& source, STATE& target, AggregateInputData&) {
-    target.rect = target.rect.Union(source.rect);
+    target.Union(source);
   }
 
   template <class INPUT_TYPE, class STATE, class OP>
@@ -258,11 +274,11 @@ struct S2BoundsRectAgg {
       S2CellId cell(cell_id);
       S2LatLng pt = cell.ToLatLng();
       S2LatLngRect rect(pt, pt);
-      state.rect = state.rect.Union(rect);
+      state.Union(rect);
     } else {
       auto geog = decoder.Decode(input);
       S2LatLngRect rect = geog->Region()->GetRectBound();
-      state.rect = state.rect.Union(rect);
+      state.Union(rect);
     }
   }
 
@@ -274,11 +290,11 @@ struct S2BoundsRectAgg {
 
   template <class T, class STATE>
   static void Finalize(STATE& state, T& target, AggregateFinalizeData& finalize_data) {
-    if (state.rect.is_empty()) {
+    auto rect = S2LatLngRect(state.lat, state.lng);
+
+    if (rect.is_empty()) {
       finalize_data.ReturnNull();
     } else {
-      S2LatLngRect rect = state.rect;
-
       auto& struct_vec = StructVector::GetEntries(finalize_data.result);
       auto min_x_data = FlatVector::GetData<double>(*struct_vec[0]);
       auto min_y_data = FlatVector::GetData<double>(*struct_vec[1]);
