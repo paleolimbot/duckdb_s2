@@ -348,28 +348,31 @@ SELECT s2_box_wkb(s2_bounds_rect('POINT (0 1)'::GEOGRAPHY)) as rect;
     char* coords = const_cast<char*>(encoder.base() + encoder_coord_offset);
 
     Encoder multi_encoder;
-    // multi_encoder.Ensure(92 * 2 + 8 + 1);
-    // multi_encoder.put8(0x01);
-    // multi_encoder.put32(6);
-    // multi_encoder.put32(2);
-    // multi_encoder.put32(3);
-    // multi_encoder.put32(1);
-    // multi_encoder.put32(5);
-    size_t multi_encoder_coord_offset_east = encoder.length();
-    // for (int i = 0; i < 10; i++) {
-    //   encoder.put64(0);
-    // }
-    // multi_encoder.put32(3);
-    // multi_encoder.put32(1);
-    // multi_encoder.put32(5);
-    size_t multi_encoder_coord_offset_west = encoder.length();
-    // for (int i = 0; i < 10; i++) {
-    //   encoder.put64(0);
-    // }
+    multi_encoder.Ensure(93 * 2 + 8 + 1);
+    multi_encoder.put8(0x01);
+    multi_encoder.put32(6);
+    multi_encoder.put32(2);
+    multi_encoder.put8(0x01);
+    multi_encoder.put32(3);
+    multi_encoder.put32(1);
+    multi_encoder.put32(5);
+    size_t multi_encoder_coord_offset_east = multi_encoder.length();
+    for (int i = 0; i < 10; i++) {
+      multi_encoder.put64(0);
+    }
+
+    multi_encoder.put8(0x01);
+    multi_encoder.put32(3);
+    multi_encoder.put32(1);
+    multi_encoder.put32(5);
+    size_t multi_encoder_coord_offset_west = multi_encoder.length();
+    for (int i = 0; i < 10; i++) {
+      multi_encoder.put64(0);
+    }
     char* multi_coords_east =
-        const_cast<char*>(encoder.base() + multi_encoder_coord_offset_east);
+        const_cast<char*>(multi_encoder.base() + multi_encoder_coord_offset_east);
     char* multi_coords_west =
-        const_cast<char*>(encoder.base() + multi_encoder_coord_offset_west);
+        const_cast<char*>(multi_encoder.base() + multi_encoder_coord_offset_west);
 
     auto count = args.size();
     auto& source = args.data[0];
@@ -381,11 +384,11 @@ SELECT s2_box_wkb(s2_bounds_rect('POINT (0 1)'::GEOGRAPHY)) as rect;
           auto ymax = box.d_val;
           if (xmax >= xmin) {
             PopulateCoordsFromValues(coords, xmin, ymin, xmax, ymax);
-            return StringVector::AddStringOrBlob(result,
-                                           string_t(encoder.base(), encoder.length()));
+            return StringVector::AddStringOrBlob(
+                result, string_t(encoder.base(), encoder.length()));
           } else {
-            PopulateCoordsFromValues(multi_coords_east, xmin, ymin, -180, ymax);
-            PopulateCoordsFromValues(multi_coords_west, xmax, ymin, 180, ymax);
+            PopulateCoordsFromValues(multi_coords_east, xmin, ymin, 180, ymax);
+            PopulateCoordsFromValues(multi_coords_west, -180, ymin, xmax, ymax);
             return StringVector::AddStringOrBlob(
                 result, string_t(multi_encoder.base(), multi_encoder.length()));
           }
