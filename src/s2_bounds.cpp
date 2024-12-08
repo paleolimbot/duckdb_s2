@@ -1,5 +1,6 @@
 
 
+#include "duckdb/common/vector_operations/generic_executor.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/main/extension_util.hpp"
 
@@ -305,11 +306,153 @@ void RegisterAgg(DatabaseInstance& instance) {
   ExtensionUtil::RegisterFunction(instance, function);
 }
 
+struct S2BoxLngLatAsWkb {
+  static void Register(DatabaseInstance& instance) {
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_box_wkb", [](ScalarFunctionBuilder& func) {
+          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("box", Types::BOX_LNGLAT());
+            variant.SetReturnType(LogicalType::BLOB);
+            variant.SetFunction(ExecuteFn);
+          });
+
+          func.SetDescription(
+              R"(
+Serialize a BOX_LNGLAT as WKB for export.
+)");
+          func.SetExample(R"(
+SELECT s2_box_wkb(s2_bounds_rect('POINT (0 1)'::GEOGRAPHY)) as rect;
+          )");
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "bounds");
+        });
+  }
+
+  static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
+    using BOX_TYPE = StructTypeQuaternary<double, double, double, double>;
+    using GEOGRAPHY_TYPE = PrimitiveType<string_t>;
+
+    // We need two WKB outputs: one for a normal box and one for a box that wraps
+    // over the antimeridian.
+    Encoder encoder;
+    encoder.Ensure(92 + 1);
+    encoder.put8(0x01);
+    encoder.put32(3);
+    encoder.put32(1);
+    encoder.put32(5);
+    size_t encoder_coord_offset = encoder.length();
+    for (int i = 0; i < 10; i++) {
+      encoder.put64(0);
+    }
+    char* coords = const_cast<char*>(encoder.base() + encoder_coord_offset);
+
+    Encoder multi_encoder;
+    // multi_encoder.Ensure(92 * 2 + 8 + 1);
+    // multi_encoder.put8(0x01);
+    // multi_encoder.put32(6);
+    // multi_encoder.put32(2);
+    // multi_encoder.put32(3);
+    // multi_encoder.put32(1);
+    // multi_encoder.put32(5);
+    size_t multi_encoder_coord_offset_east = encoder.length();
+    // for (int i = 0; i < 10; i++) {
+    //   encoder.put64(0);
+    // }
+    // multi_encoder.put32(3);
+    // multi_encoder.put32(1);
+    // multi_encoder.put32(5);
+    size_t multi_encoder_coord_offset_west = encoder.length();
+    // for (int i = 0; i < 10; i++) {
+    //   encoder.put64(0);
+    // }
+    char* multi_coords_east =
+        const_cast<char*>(encoder.base() + multi_encoder_coord_offset_east);
+    char* multi_coords_west =
+        const_cast<char*>(encoder.base() + multi_encoder_coord_offset_west);
+
+    auto count = args.size();
+    auto& source = args.data[0];
+    GenericExecutor::ExecuteUnary<BOX_TYPE, GEOGRAPHY_TYPE>(
+        source, result, count, [&](BOX_TYPE& box) {
+          auto xmin = box.a_val;
+          auto ymin = box.b_val;
+          auto xmax = box.c_val;
+          auto ymax = box.d_val;
+          if (xmax >= xmin) {
+            PopulateCoordsFromValues(coords, xmin, ymin, xmax, ymax);
+            return StringVector::AddStringOrBlob(result,
+                                           string_t(encoder.base(), encoder.length()));
+          } else {
+            PopulateCoordsFromValues(multi_coords_east, xmin, ymin, -180, ymax);
+            PopulateCoordsFromValues(multi_coords_west, xmax, ymin, 180, ymax);
+            return StringVector::AddStringOrBlob(
+                result, string_t(multi_encoder.base(), multi_encoder.length()));
+          }
+        });
+  }
+
+  static void PopulateCoordsFromValues(char* coords, double xmin, double ymin,
+                                       double xmax, double ymax) {
+    LittleEndian::Store(xmin, coords + 0 * sizeof(double));
+    LittleEndian::Store(ymin, coords + 1 * sizeof(double));
+    LittleEndian::Store(xmax, coords + 2 * sizeof(double));
+    LittleEndian::Store(ymin, coords + 3 * sizeof(double));
+    LittleEndian::Store(xmax, coords + 4 * sizeof(double));
+    LittleEndian::Store(ymax, coords + 5 * sizeof(double));
+    LittleEndian::Store(xmin, coords + 6 * sizeof(double));
+    LittleEndian::Store(ymax, coords + 7 * sizeof(double));
+    LittleEndian::Store(xmin, coords + 8 * sizeof(double));
+    LittleEndian::Store(ymin, coords + 9 * sizeof(double));
+  }
+};
+
+struct S2BoxStruct {
+  static void Register(DatabaseInstance& instance) {
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_box_struct", [](ScalarFunctionBuilder& func) {
+          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("box", Types::BOX_LNGLAT());
+            variant.SetReturnType(LogicalType::STRUCT({{"xmin", LogicalType::DOUBLE},
+                                                       {"ymin", LogicalType::DOUBLE},
+                                                       {"xmax", LogicalType::DOUBLE},
+                                                       {"ymax", LogicalType::DOUBLE}}));
+            variant.SetFunction(ExecuteFn);
+          });
+
+          func.SetDescription(
+              R"(
+Return a BOX_LNGLAT storage as a struct(xmin, ymin, xmax, ymax).
+)");
+          func.SetExample(R"(
+SELECT s2_box_struct(s2_bounds_rect('POINT (0 1)'::GEOGRAPHY)) as rect;
+          )");
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "bounds");
+        });
+  }
+
+  static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
+    auto& struct_vec_src = StructVector::GetEntries(args.data[0]);
+    auto& struct_vec_dst = StructVector::GetEntries(result);
+    for (int i = 0; i < 4; i++) {
+      struct_vec_dst[i]->Reference(*struct_vec_src[i]);
+    }
+
+    if (args.size() == 1) {
+      result.SetVectorType(VectorType::CONSTANT_VECTOR);
+    }
+  }
+};
+
 }  // namespace
 
 void RegisterS2GeographyBounds(DatabaseInstance& instance) {
   S2Covering::Register(instance);
   S2BoundsRect::Register(instance);
+  S2BoxLngLatAsWkb::Register(instance);
+  S2BoxStruct::Register(instance);
   RegisterAgg(instance);
 }
 

@@ -88,3 +88,15 @@ query I
 SELECT s2_bounds_rect_agg(geog) FROM s2_data_countries();
 ----
 {'xmin': -180.0, 'ymin': -90.0, 'xmax': 180.0, 'ymax': 83.64513000000002}
+
+
+# Test the box exporters
+query I
+SELECT s2_bounds_rect(s2_data_country('Germany')).s2_box_wkb().s2_geogfromwkb().s2_format(4);
+----
+POLYGON ((5.9887 47.3025, 15.017 47.3025, 15.017 54.9831, 5.9887 54.9831, 5.9887 47.3025))
+
+query I
+SELECT s2_bounds_rect(s2_data_country('Germany')).s2_box_struct();
+----
+{'xmin': 5.988658, 'ymin': 47.30248799999997, 'xmax': 15.016996000000002, 'ymax': 54.983104000000026}
