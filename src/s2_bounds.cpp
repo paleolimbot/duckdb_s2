@@ -4,7 +4,6 @@
 #include "duckdb/main/extension_util.hpp"
 
 #include "s2/s2earth.h"
-#include "s2/s2latlng_rect_bounder.h"
 #include "s2/s2region_coverer.h"
 #include "s2geography/accessors.h"
 
@@ -186,7 +185,6 @@ SELECT s2_bounds_rect(s2_data_country('Fiji')) as rect;
     auto max_y_data = FlatVector::GetData<double>(*struct_vec[3]);
 
     GeographyDecoder decoder;
-    S2LatLngRectBounder bounder;
 
     UnifiedVectorFormat input_vdata;
     input.ToUnifiedFormat(count, input_vdata);
@@ -231,11 +229,82 @@ SELECT s2_bounds_rect(s2_data_country('Fiji')) as rect;
   }
 };
 
+struct BoundsAggState {
+  GeographyDecoder decoder;
+  S2LatLngRect rect;
+};
+
+struct S2BoundsRectAgg {
+  template <class STATE>
+  static void Initialize(STATE& state) {
+    state.rect = S2LatLngRect::Empty();
+  }
+
+  template <class STATE, class OP>
+  static void Combine(const STATE& source, STATE& target, AggregateInputData&) {
+    target.rect = target.rect.Union(source.rect);
+  }
+
+  template <class INPUT_TYPE, class STATE, class OP>
+  static void Operation(STATE& state, const INPUT_TYPE& input, AggregateUnaryInput&) {
+    state.decoder.DecodeTag(input);
+    if (state.decoder.tag.flags & s2geography::EncodeTag::kFlagEmpty) {
+      return;
+    }
+
+    if (state.decoder.tag.kind == s2geography::GeographyKind::CELL_CENTER) {
+      uint64_t cell_id = LittleEndian::Load64(input.GetData() + 4);
+      S2CellId cell(cell_id);
+      S2LatLng pt = cell.ToLatLng();
+      S2LatLngRect rect(pt, pt);
+      state.rect = state.rect.Union(rect);
+    } else {
+      auto geog = state.decoder.Decode(input);
+      S2LatLngRect rect = geog->Region()->GetRectBound();
+      state.rect = state.rect.Union(rect);
+    }
+  }
+
+  template <class INPUT_TYPE, class STATE, class OP>
+  static void ConstantOperation(STATE& state, const INPUT_TYPE& input,
+                                AggregateUnaryInput& agg, idx_t) {
+    Operation<INPUT_TYPE, STATE, OP>(state, input, agg);
+  }
+
+  template <class T, class STATE>
+  static void Finalize(STATE& state, T& target, AggregateFinalizeData& finalize_data) {
+    if (state.rect.is_empty()) {
+      finalize_data.ReturnNull();
+    } else {
+      S2LatLngRect out = state.rect;
+      std::string out_str = std::string("[") + std::to_string(out.lng_lo().degrees()) +
+                            ", " + std::to_string(out.lat_lo().degrees()) + ", " +
+                            std::to_string(out.lng_hi().degrees()) + ", " +
+                            std::to_string(out.lat_hi().degrees()) + "]";
+
+      target = StringVector::AddString(finalize_data.result, out_str);
+    }
+  }
+
+  static bool IgnoreNull() { return true; }
+};
+
+void RegisterAgg(DatabaseInstance& instance) {
+  auto function = AggregateFunction::UnaryAggregate<BoundsAggState, string_t, string_t,
+                                                    S2BoundsRectAgg>(
+      Types::GEOGRAPHY(), LogicalType::VARCHAR);
+
+  // Register the function
+  function.name = "s2_bounds_rect_agg";
+  ExtensionUtil::RegisterFunction(instance, function);
+}
+
 }  // namespace
 
 void RegisterS2GeographyBounds(DatabaseInstance& instance) {
   S2Covering::Register(instance);
   S2BoundsRect::Register(instance);
+  RegisterAgg(instance);
 }
 
 }  // namespace duckdb_s2
