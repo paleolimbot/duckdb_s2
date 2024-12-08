@@ -276,13 +276,19 @@ struct S2BoundsRectAgg {
     if (state.rect.is_empty()) {
       finalize_data.ReturnNull();
     } else {
-      S2LatLngRect out = state.rect;
-      std::string out_str = std::string("[") + std::to_string(out.lng_lo().degrees()) +
-                            ", " + std::to_string(out.lat_lo().degrees()) + ", " +
-                            std::to_string(out.lng_hi().degrees()) + ", " +
-                            std::to_string(out.lat_hi().degrees()) + "]";
+      S2LatLngRect rect = state.rect;
 
-      target = StringVector::AddString(finalize_data.result, out_str);
+      auto& struct_vec = StructVector::GetEntries(finalize_data.result);
+      auto min_x_data = FlatVector::GetData<double>(*struct_vec[0]);
+      auto min_y_data = FlatVector::GetData<double>(*struct_vec[1]);
+      auto max_x_data = FlatVector::GetData<double>(*struct_vec[2]);
+      auto max_y_data = FlatVector::GetData<double>(*struct_vec[3]);
+
+      idx_t i = finalize_data.result_idx;
+      min_x_data[i] = rect.lng_lo().degrees();
+      min_y_data[i] = rect.lat_lo().degrees();
+      max_x_data[i] = rect.lng_hi().degrees();
+      max_y_data[i] = rect.lat_hi().degrees();
     }
   }
 
@@ -291,8 +297,8 @@ struct S2BoundsRectAgg {
 
 void RegisterAgg(DatabaseInstance& instance) {
   auto function = AggregateFunction::UnaryAggregate<BoundsAggState, string_t, string_t,
-                                                    S2BoundsRectAgg>(
-      Types::GEOGRAPHY(), LogicalType::VARCHAR);
+                                                    S2BoundsRectAgg>(Types::GEOGRAPHY(),
+                                                                     Types::BOX_LNGLAT());
 
   // Register the function
   function.name = "s2_bounds_rect_agg";
