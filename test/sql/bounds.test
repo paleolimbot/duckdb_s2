@@ -56,9 +56,6 @@ SELECT s2_bounds_rect('MULTIPOINT (0 1, 2 3)'::GEOGRAPHY);
 {'xmin': 0.0, 'ymin': 1.0, 'xmax': 1.9999999999999996, 'ymax': 3.0000000000000004}
 
 # s2_bounds_rect_agg()
-# These results aren't really correct until I figure out how to either
-# encode the result of an aggregate as a struct or change the storage of the
-# box_lnglat to be a blob.
 
 # Check empty input optimization
 query I
