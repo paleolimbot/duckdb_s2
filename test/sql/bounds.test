@@ -30,3 +30,22 @@ statement error
 SELECT s2_covering_fixed_level(geog, UNNEST([1, 2])) from s2_data_countries();
 ----
 Invalid Input Error: s2_covering_fixed_level(): level must be a constant
+
+# s2_bounds_rect()
+query I
+SELECT s2_bounds_rect(NULL) IS NULL;
+----
+true
+
+# Check empty input optimization
+# Possibly should be NULL and not nans?
+query I
+SELECT s2_bounds_rect('POINT EMPTY'::GEOGRAPHY);
+----
+{'xmin': nan, 'ymin': nan, 'xmax': nan, 'ymax': nan}
+
+# Check
+query I
+SELECT s2_cellfromlonlat(-64, 45).s2_bounds_rect();
+----
+{'xmin': -63.99999997805, 'ymin': 45.0000000116166, 'xmax': -63.99999997805, 'ymax': 45.0000000116166}
