@@ -4,6 +4,7 @@
 #include "duckdb/main/extension_util.hpp"
 
 #include "s2/s2earth.h"
+#include "s2/s2latlng_rect_bounder.h"
 #include "s2/s2region_coverer.h"
 #include "s2geography/accessors.h"
 
@@ -146,10 +147,95 @@ SELECT s2_covering_fixed_level(s2_data_country('Germany'), 4) AS covering;
         });
   }
 };
+
+struct S2BoundsRect {
+  static void Register(DatabaseInstance& instance) {
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_bounds_rect", [](ScalarFunctionBuilder& func) {
+          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("geog", Types::GEOGRAPHY());
+            variant.SetReturnType(Types::BOX_LNGLAT());
+            variant.SetFunction(ExecuteFn);
+          });
+
+          func.SetDescription(
+              R"(
+Returns the bounds of the input geography as a box with Cartesian edges.
+
+The output xmin may be greater than xmax if the geography crosses the
+antimeridian.
+)");
+          func.SetExample(R"(
+SELECT s2_bounds_rect(s2_data_country('Germany')) as rect;
+----
+SELECT s2_bounds_rect(s2_data_country('Fiji')) as rect;
+          )");
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "bounds");
+        });
+  }
+
+  static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
+    auto count = args.size();
+    auto& input = args.data[0];
+    auto& struct_vec = StructVector::GetEntries(result);
+    auto min_x_data = FlatVector::GetData<double>(*struct_vec[0]);
+    auto min_y_data = FlatVector::GetData<double>(*struct_vec[1]);
+    auto max_x_data = FlatVector::GetData<double>(*struct_vec[2]);
+    auto max_y_data = FlatVector::GetData<double>(*struct_vec[3]);
+
+    GeographyDecoder decoder;
+    S2LatLngRectBounder bounder;
+
+    UnifiedVectorFormat input_vdata;
+    input.ToUnifiedFormat(count, input_vdata);
+    auto input_data = UnifiedVectorFormat::GetData<string_t>(input_vdata);
+
+    for (idx_t i = 0; i < count; i++) {
+      auto row_idx = input_vdata.sel->get_index(i);
+      if (input_vdata.validity.RowIsValid(row_idx)) {
+        auto& blob = input_data[row_idx];
+
+        decoder.DecodeTag(blob);
+        if (decoder.tag.flags & s2geography::EncodeTag::kFlagEmpty) {
+          min_x_data[i] = NAN;
+          min_y_data[i] = NAN;
+          max_x_data[i] = NAN;
+          max_y_data[i] = NAN;
+        } else if (decoder.tag.kind == s2geography::GeographyKind::CELL_CENTER) {
+          uint64_t cell_id = LittleEndian::Load64(blob.GetData() + 4);
+          S2CellId cell(cell_id);
+          S2LatLng pt = cell.ToLatLng();
+          min_x_data[i] = pt.lng().degrees();
+          min_y_data[i] = pt.lat().degrees();
+          max_x_data[i] = pt.lng().degrees();
+          max_y_data[i] = pt.lat().degrees();
+        } else {
+          auto geog = decoder.Decode(blob);
+          S2LatLngRect rect = geog->Region()->GetRectBound();
+          min_x_data[i] = rect.lng_lo().degrees();
+          min_y_data[i] = rect.lat_lo().degrees();
+          max_x_data[i] = rect.lng_hi().degrees();
+          max_y_data[i] = rect.lat_hi().degrees();
+        }
+      } else {
+        // Null input, return null
+        FlatVector::SetNull(result, i, true);
+      }
+    }
+
+    if (input.GetVectorType() == VectorType::CONSTANT_VECTOR) {
+      result.SetVectorType(VectorType::CONSTANT_VECTOR);
+    }
+  }
+};
+
 }  // namespace
 
 void RegisterS2GeographyBounds(DatabaseInstance& instance) {
   S2Covering::Register(instance);
+  S2BoundsRect::Register(instance);
 }
 
 }  // namespace duckdb_s2
