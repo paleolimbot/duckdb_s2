@@ -38,11 +38,10 @@ SELECT s2_bounds_rect(NULL) IS NULL;
 true
 
 # Check empty input optimization
-# Possibly should be NULL and not nans?
 query I
-SELECT s2_bounds_rect('POINT EMPTY'::GEOGRAPHY);
+SELECT s2_bounds_rect('POINT EMPTY'::GEOGRAPHY) IS NULL;
 ----
-{'xmin': nan, 'ymin': nan, 'xmax': nan, 'ymax': nan}
+true
 
 # Check
 query I

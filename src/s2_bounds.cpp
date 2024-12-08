@@ -199,10 +199,10 @@ SELECT s2_bounds_rect(s2_data_country('Fiji')) as rect;
 
         decoder.DecodeTag(blob);
         if (decoder.tag.flags & s2geography::EncodeTag::kFlagEmpty) {
-          min_x_data[i] = NAN;
-          min_y_data[i] = NAN;
-          max_x_data[i] = NAN;
-          max_y_data[i] = NAN;
+          // Empty input, return null. This ensures that we never have to check
+          // for nan, nan, nan, nan before doing anything with a (non null)
+          // value.
+          FlatVector::SetNull(result, i, true);
         } else if (decoder.tag.kind == s2geography::GeographyKind::CELL_CENTER) {
           uint64_t cell_id = LittleEndian::Load64(blob.GetData() + 4);
           S2CellId cell(cell_id);
