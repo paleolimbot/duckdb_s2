@@ -231,7 +231,6 @@ SELECT s2_bounds_rect(s2_data_country('Fiji')) as rect;
 };
 
 struct BoundsAggState {
-  GeographyDecoder decoder;
   S2LatLngRect rect;
 };
 
@@ -248,19 +247,20 @@ struct S2BoundsRectAgg {
 
   template <class INPUT_TYPE, class STATE, class OP>
   static void Operation(STATE& state, const INPUT_TYPE& input, AggregateUnaryInput&) {
-    state.decoder.DecodeTag(input);
-    if (state.decoder.tag.flags & s2geography::EncodeTag::kFlagEmpty) {
+    GeographyDecoder decoder;
+    decoder.DecodeTag(input);
+    if (decoder.tag.flags & s2geography::EncodeTag::kFlagEmpty) {
       return;
     }
 
-    if (state.decoder.tag.kind == s2geography::GeographyKind::CELL_CENTER) {
+    if (decoder.tag.kind == s2geography::GeographyKind::CELL_CENTER) {
       uint64_t cell_id = LittleEndian::Load64(input.GetData() + 4);
       S2CellId cell(cell_id);
       S2LatLng pt = cell.ToLatLng();
       S2LatLngRect rect(pt, pt);
       state.rect = state.rect.Union(rect);
     } else {
-      auto geog = state.decoder.Decode(input);
+      auto geog = decoder.Decode(input);
       S2LatLngRect rect = geog->Region()->GetRectBound();
       state.rect = state.rect.Union(rect);
     }
