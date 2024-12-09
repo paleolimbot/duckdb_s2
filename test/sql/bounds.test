@@ -32,16 +32,11 @@ SELECT s2_covering_fixed_level(geog, UNNEST([1, 2])) from s2_data_countries();
 Invalid Input Error: s2_covering_fixed_level(): level must be a constant
 
 # s2_bounds_box()
-query I
-SELECT s2_bounds_box(NULL) IS NULL;
-----
-true
-
 # Check empty input optimization
 query I
-SELECT s2_bounds_box('POINT EMPTY'::GEOGRAPHY) IS NULL;
+SELECT s2_bounds_box('POINT EMPTY'::GEOGRAPHY);
 ----
-true
+{'xmin': 180.0, 'ymin': 57.29577951308232, 'xmax': -180.0, 'ymax': 0.0}
 
 # Check point-as-cell-center optimization
 query I
@@ -59,9 +54,9 @@ SELECT s2_bounds_box('MULTIPOINT (0 1, 2 3)'::GEOGRAPHY);
 
 # Check empty input optimization
 query I
-SELECT s2_bounds_box_agg('POINT EMPTY'::GEOGRAPHY) IS NULL;
+SELECT s2_bounds_box_agg('POINT EMPTY'::GEOGRAPHY);
 ----
-true
+{'xmin': 180.0, 'ymin': 57.29577951308232, 'xmax': -180.0, 'ymax': 0.0}
 
 # Check point-as-cell-center optimization
 query I

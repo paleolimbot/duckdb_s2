@@ -179,54 +179,29 @@ SELECT s2_bounds_box(s2_data_country('Fiji')) as rect;
   static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
     auto count = args.size();
     auto& input = args.data[0];
-    auto& struct_vec = StructVector::GetEntries(result);
-    auto min_x_data = FlatVector::GetData<double>(*struct_vec[0]);
-    auto min_y_data = FlatVector::GetData<double>(*struct_vec[1]);
-    auto max_x_data = FlatVector::GetData<double>(*struct_vec[2]);
-    auto max_y_data = FlatVector::GetData<double>(*struct_vec[3]);
+
+    using BOX_TYPE = StructTypeQuaternary<double, double, double, double>;
+    using GEOGRAPHY_TYPE = PrimitiveType<string_t>;
 
     GeographyDecoder decoder;
 
-    UnifiedVectorFormat input_vdata;
-    input.ToUnifiedFormat(count, input_vdata);
-    auto input_data = UnifiedVectorFormat::GetData<string_t>(input_vdata);
-
-    for (idx_t i = 0; i < count; i++) {
-      auto row_idx = input_vdata.sel->get_index(i);
-      if (input_vdata.validity.RowIsValid(row_idx)) {
-        auto& blob = input_data[row_idx];
-
-        decoder.DecodeTag(blob);
-        if (decoder.tag.flags & s2geography::EncodeTag::kFlagEmpty) {
-          // Empty input, return null. This ensures that we never have to check
-          // for nan, nan, nan, nan before doing anything with a (non null)
-          // value.
-          FlatVector::SetNull(result, i, true);
-        } else if (decoder.tag.kind == s2geography::GeographyKind::CELL_CENTER) {
-          uint64_t cell_id = LittleEndian::Load64(blob.GetData() + 4);
-          S2CellId cell(cell_id);
-          S2LatLng pt = cell.ToLatLng();
-          min_x_data[i] = pt.lng().degrees();
-          min_y_data[i] = pt.lat().degrees();
-          max_x_data[i] = pt.lng().degrees();
-          max_y_data[i] = pt.lat().degrees();
-        } else {
-          auto geog = decoder.Decode(blob);
-          S2LatLngRect rect = geog->Region()->GetRectBound();
-          min_x_data[i] = rect.lng_lo().degrees();
-          min_y_data[i] = rect.lat_lo().degrees();
-          max_x_data[i] = rect.lng_hi().degrees();
-          max_y_data[i] = rect.lat_hi().degrees();
-        }
-      } else {
-        // Null input, return null
-        FlatVector::SetNull(result, i, true);
-      }
-    }
-
-    if (input.GetVectorType() == VectorType::CONSTANT_VECTOR) {
-      result.SetVectorType(VectorType::CONSTANT_VECTOR);
-    }
+    GenericExecutor::ExecuteUnary<GEOGRAPHY_TYPE, BOX_TYPE>(
+        input, result, count, [&](GEOGRAPHY_TYPE& blob) {
+          decoder.DecodeTag(blob.val);
+          S2LatLngRect out;
+          if (decoder.tag.flags & s2geography::EncodeTag::kFlagEmpty) {
+            out = S2LatLngRect::Empty();
+          } else if (decoder.tag.kind == s2geography::GeographyKind::CELL_CENTER) {
+            uint64_t cell_id = LittleEndian::Load64(blob.val.GetData() + 4);
+            S2CellId cell(cell_id);
+            out = S2LatLngRect::FromPoint(cell.ToLatLng());
+          } else {
+            auto geog = decoder.Decode(blob.val);
+            out = geog->Region()->GetRectBound();
+          }
+          return BOX_TYPE{out.lng_lo().degrees(), out.lat_lo().degrees(),
+                          out.lng_hi().degrees(), out.lat_hi().degrees()};
+        });
   }
 };
 
@@ -292,21 +267,17 @@ struct S2BoundsRectAgg {
   static void Finalize(STATE& state, T& target, AggregateFinalizeData& finalize_data) {
     auto rect = S2LatLngRect(state.lat, state.lng);
 
-    if (rect.is_empty()) {
-      finalize_data.ReturnNull();
-    } else {
-      auto& struct_vec = StructVector::GetEntries(finalize_data.result);
-      auto min_x_data = FlatVector::GetData<double>(*struct_vec[0]);
-      auto min_y_data = FlatVector::GetData<double>(*struct_vec[1]);
-      auto max_x_data = FlatVector::GetData<double>(*struct_vec[2]);
-      auto max_y_data = FlatVector::GetData<double>(*struct_vec[3]);
+    auto& struct_vec = StructVector::GetEntries(finalize_data.result);
+    auto min_x_data = FlatVector::GetData<double>(*struct_vec[0]);
+    auto min_y_data = FlatVector::GetData<double>(*struct_vec[1]);
+    auto max_x_data = FlatVector::GetData<double>(*struct_vec[2]);
+    auto max_y_data = FlatVector::GetData<double>(*struct_vec[3]);
 
-      idx_t i = finalize_data.result_idx;
-      min_x_data[i] = rect.lng_lo().degrees();
-      min_y_data[i] = rect.lat_lo().degrees();
-      max_x_data[i] = rect.lng_hi().degrees();
-      max_y_data[i] = rect.lat_hi().degrees();
-    }
+    idx_t i = finalize_data.result_idx;
+    min_x_data[i] = rect.lng_lo().degrees();
+    min_y_data[i] = rect.lat_lo().degrees();
+    max_x_data[i] = rect.lng_hi().degrees();
+    max_y_data[i] = rect.lat_hi().degrees();
   }
 
   static bool IgnoreNull() { return true; }
