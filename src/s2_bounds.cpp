@@ -481,8 +481,8 @@ struct S2Box {
           R"(
 Create a S2_BOX from xmin (west), ymin (south), xmax (east), and ymax (north).
 
-This function does not validate boxes. Note that there is currently no "empty" box:
-use NULL to represent box bounds if you need to represent this concept.
+Note that any box where ymin > ymax is considere EMPTY for the purposes of
+comparison.
 )");
       func.SetExample(R"(
 SELECT s2_box(5.989, 47.302, 15.017, 54.983) as box;
@@ -526,6 +526,102 @@ SELECT s2_box(177.285, -18.288, 177.285, -16.0209) as box;
   }
 };
 
+struct S2BoxIntersects {
+  static void Register(DatabaseInstance& instance) {
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_box_intersects", [](ScalarFunctionBuilder& func) {
+          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("box1", Types::S2_BOX());
+            variant.AddParameter("box2", Types::S2_BOX());
+            variant.SetReturnType(LogicalType::BOOLEAN);
+            variant.SetFunction(ExecuteFn);
+          });
+
+          func.SetDescription(
+              R"(
+Return true if two boxes have any points in common.
+)");
+          func.SetExample(R"(
+SELECT s2_box_intersects(
+  s2_bounds_box(s2_data_country('Germany')),
+  s2_bounds_box(s2_data_country('France'))
+);
+----
+SELECT s2_box_intersects(
+  s2_bounds_box(s2_data_country('Germany')),
+  s2_bounds_box(s2_data_country('Canada'))
+);
+          )");
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "bounds");
+        });
+  }
+
+  static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
+    using BOX_TYPE = StructTypeQuaternary<double, double, double, double>;
+    using BOOL_TYPE = PrimitiveType<bool>;
+    Vector& lhs_vec = args.data[0];
+    Vector& rhs_vec = args.data[1];
+    idx_t count = args.size();
+
+    GenericExecutor::ExecuteBinary<BOX_TYPE, BOX_TYPE, BOOL_TYPE>(
+        lhs_vec, rhs_vec, result, count, [&](BOX_TYPE& lhs, BOX_TYPE& rhs) {
+          S2LatLngRect lhs_rect(S2LatLng::FromDegrees(lhs.b_val, lhs.a_val),
+                                S2LatLng::FromDegrees(lhs.d_val, lhs.c_val));
+          S2LatLngRect rhs_rect(S2LatLng::FromDegrees(rhs.b_val, rhs.a_val),
+                                S2LatLng::FromDegrees(rhs.d_val, rhs.c_val));
+          return lhs_rect.Intersects(rhs_rect);
+        });
+  }
+};
+
+struct S2BoxUnion {
+  static void Register(DatabaseInstance& instance) {
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_box_union", [](ScalarFunctionBuilder& func) {
+          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("box1", Types::S2_BOX());
+            variant.AddParameter("box2", Types::S2_BOX());
+            variant.SetReturnType(Types::S2_BOX());
+            variant.SetFunction(ExecuteFn);
+          });
+
+          func.SetDescription(
+              R"(
+Return the smallest possible box that contains both input boxes.
+)");
+          func.SetExample(R"(
+SELECT s2_box_union(
+  s2_bounds_box(s2_data_country('Germany')),
+  s2_bounds_box(s2_data_country('France'))
+);
+          )");
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "bounds");
+        });
+  }
+
+  static inline void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
+    using BOX_TYPE = StructTypeQuaternary<double, double, double, double>;
+    Vector& lhs_vec = args.data[0];
+    Vector& rhs_vec = args.data[1];
+    idx_t count = args.size();
+
+    GenericExecutor::ExecuteBinary<BOX_TYPE, BOX_TYPE, BOX_TYPE>(
+        lhs_vec, rhs_vec, result, count, [&](BOX_TYPE& lhs, BOX_TYPE& rhs) {
+          S2LatLngRect lhs_rect(S2LatLng::FromDegrees(lhs.b_val, lhs.a_val),
+                                S2LatLng::FromDegrees(lhs.d_val, lhs.c_val));
+          S2LatLngRect rhs_rect(S2LatLng::FromDegrees(rhs.b_val, rhs.a_val),
+                                S2LatLng::FromDegrees(rhs.d_val, rhs.c_val));
+          S2LatLngRect out = lhs_rect.Union(rhs_rect);
+          return BOX_TYPE{out.lng_lo().degrees(), out.lat_lo().degrees(),
+                          out.lng_hi().degrees(), out.lat_hi().degrees()};
+        });
+  }
+};
+
 }  // namespace
 
 void RegisterS2GeographyBounds(DatabaseInstance& instance) {
@@ -534,6 +630,9 @@ void RegisterS2GeographyBounds(DatabaseInstance& instance) {
   S2BoxLngLatAsWkb::Register(instance);
   S2BoxStruct::Register(instance);
   S2Box::Register(instance);
+  S2BoxIntersects::Register(instance);
+  S2BoxUnion::Register(instance);
+
   RegisterAgg(instance);
 }
 

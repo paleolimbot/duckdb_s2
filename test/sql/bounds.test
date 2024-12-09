@@ -108,3 +108,25 @@ query I
 SELECT s2_box(5.989, 47.302, 15.017, 54.983);
 ----
 {'xmin': 5.989, 'ymin': 47.302, 'xmax': 15.017, 'ymax': 54.983}
+
+# s2_box_intersects()
+query I
+SELECT s2_box_intersects(s2_bounds_box(s2_data_country('Germany')), s2_bounds_box(s2_data_country('France')));
+----
+true
+
+query I
+SELECT s2_box_intersects(s2_bounds_box(s2_data_country('Germany')), s2_bounds_box(s2_data_country('Canada')));
+----
+false
+
+# s2_box_union()
+query I
+SELECT s2_box_union(s2_box(0, 1, 2, 3), s2_box(4, 5, 6, 7));
+----
+{'xmin': 0.0, 'ymin': 1.0, 'xmax': 6.000000000000001, 'ymax': 7.0}
+
+query I
+SELECT s2_box_union(s2_box(179, 1, 180, 3), s2_box(-180, 5, -179, 7));
+----
+{'xmin': 179.0, 'ymin': 1.0, 'xmax': -179.0, 'ymax': 7.0}
