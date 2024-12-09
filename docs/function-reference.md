@@ -10,8 +10,8 @@
 | [`s2_x`](#s2_x) | Extract the longitude of a point geography.|
 | [`s2_y`](#s2_y) | Extract the latitude of a point geography.|
 | [`s2_bounds_rect`](#s2_bounds_rect) | Returns the bounds of the input geography as a box with Cartesian edges.|
-| [`s2_box_struct`](#s2_box_struct) | Return a BOX_LNGLAT storage as a struct(xmin, ymin, xmax, ymax).|
-| [`s2_box_wkb`](#s2_box_wkb) | Serialize a BOX_LNGLAT as WKB for export.|
+| [`s2_box_struct`](#s2_box_struct) | Return a S2_BOX storage as a struct(xmin, ymin, xmax, ymax).|
+| [`s2_box_wkb`](#s2_box_wkb) | Serialize a S2_BOX as WKB for export.|
 | [`s2_covering`](#s2_covering) | Returns the S2 cell covering of the geography.|
 | [`s2_covering_fixed_level`](#s2_covering_fixed_level) | Returns the S2 cell covering of the geography with a fixed level.|
 | [`s2_arbitrarycellfromwkb`](#s2_arbitrarycellfromwkb) | Get an arbitrary S2_CELL_CENTER on or near the input.|
@@ -232,7 +232,7 @@ SELECT s2_y('POINT (-64 45)'::GEOGRAPHY);
 Returns the bounds of the input geography as a box with Cartesian edges.
 
 ```sql
-BOX_LNGLAT s2_bounds_rect(geog GEOGRAPHY)
+S2_BOX s2_bounds_rect(geog GEOGRAPHY)
 ```
 
 #### Description
@@ -246,7 +246,7 @@ antimeridian.
 SELECT s2_bounds_rect(s2_data_country('Germany')) as rect;
 --┌───────────────────────────────────────────────────────────────────────────────────────────────────────┐
 --│                                                 rect                                                  │
---│                                              box_lnglat                                               │
+--│                                              S2_BOX                                               │
 --├───────────────────────────────────────────────────────────────────────────────────────────────────────┤
 --│ {'xmin': 5.988658, 'ymin': 47.30248799999997, 'xmax': 15.016996000000002, 'ymax': 54.983104000000026} │
 --└───────────────────────────────────────────────────────────────────────────────────────────────────────┘
@@ -254,7 +254,7 @@ SELECT s2_bounds_rect(s2_data_country('Germany')) as rect;
 SELECT s2_bounds_rect(s2_data_country('Fiji')) as rect;
 --┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
 --│                                               rect                                               │
---│                                            box_lnglat                                            │
+--│                                            S2_BOX                                            │
 --├──────────────────────────────────────────────────────────────────────────────────────────────────┤
 --│ {'xmin': 177.28504, 'ymin': -18.28799000000003, 'xmax': -179.79332, 'ymax': -16.020881999999975} │
 --└──────────────────────────────────────────────────────────────────────────────────────────────────┘
@@ -262,10 +262,10 @@ SELECT s2_bounds_rect(s2_data_country('Fiji')) as rect;
 
 ### s2_box_struct
 
-Return a BOX_LNGLAT storage as a struct(xmin, ymin, xmax, ymax).
+Return a S2_BOX storage as a struct(xmin, ymin, xmax, ymax).
 
 ```sql
-STRUCT(xmin DOUBLE, ymin DOUBLE, xmax DOUBLE, ymax DOUBLE) s2_box_struct(box BOX_LNGLAT)
+STRUCT(xmin DOUBLE, ymin DOUBLE, xmax DOUBLE, ymax DOUBLE) s2_box_struct(box S2_BOX)
 ```
 
 #### Example
@@ -282,10 +282,10 @@ SELECT s2_box_struct(s2_bounds_rect('POINT (0 1)'::GEOGRAPHY)) as rect;
 
 ### s2_box_wkb
 
-Serialize a BOX_LNGLAT as WKB for export.
+Serialize a S2_BOX as WKB for export.
 
 ```sql
-BLOB s2_box_wkb(box BOX_LNGLAT)
+BLOB s2_box_wkb(box S2_BOX)
 ```
 
 #### Example

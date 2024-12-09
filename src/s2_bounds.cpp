@@ -151,10 +151,10 @@ SELECT s2_covering_fixed_level(s2_data_country('Germany'), 4) AS covering;
 struct S2BoundsRect {
   static void Register(DatabaseInstance& instance) {
     FunctionBuilder::RegisterScalar(
-        instance, "s2_bounds_rect", [](ScalarFunctionBuilder& func) {
+        instance, "s2_bounds_box", [](ScalarFunctionBuilder& func) {
           func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
             variant.AddParameter("geog", Types::GEOGRAPHY());
-            variant.SetReturnType(Types::BOX_LNGLAT());
+            variant.SetReturnType(Types::S2_BOX());
             variant.SetFunction(ExecuteFn);
           });
 
@@ -166,9 +166,9 @@ The output xmin may be greater than xmax if the geography crosses the
 antimeridian.
 )");
           func.SetExample(R"(
-SELECT s2_bounds_rect(s2_data_country('Germany')) as rect;
+SELECT s2_bounds_box(s2_data_country('Germany')) as rect;
 ----
-SELECT s2_bounds_rect(s2_data_country('Fiji')) as rect;
+SELECT s2_bounds_box(s2_data_country('Fiji')) as rect;
           )");
 
           func.SetTag("ext", "geography");
@@ -315,10 +315,10 @@ struct S2BoundsRectAgg {
 void RegisterAgg(DatabaseInstance& instance) {
   auto function = AggregateFunction::UnaryAggregate<BoundsAggState, string_t, string_t,
                                                     S2BoundsRectAgg>(Types::GEOGRAPHY(),
-                                                                     Types::BOX_LNGLAT());
+                                                                     Types::S2_BOX());
 
   // Register the function
-  function.name = "s2_bounds_rect_agg";
+  function.name = "s2_bounds_box_agg";
   ExtensionUtil::RegisterFunction(instance, function);
 }
 
@@ -327,17 +327,17 @@ struct S2BoxLngLatAsWkb {
     FunctionBuilder::RegisterScalar(
         instance, "s2_box_wkb", [](ScalarFunctionBuilder& func) {
           func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
-            variant.AddParameter("box", Types::BOX_LNGLAT());
+            variant.AddParameter("box", Types::S2_BOX());
             variant.SetReturnType(LogicalType::BLOB);
             variant.SetFunction(ExecuteFn);
           });
 
           func.SetDescription(
               R"(
-Serialize a BOX_LNGLAT as WKB for export.
+Serialize a S2_BOX as WKB for export.
 )");
           func.SetExample(R"(
-SELECT s2_box_wkb(s2_bounds_rect('POINT (0 1)'::GEOGRAPHY)) as rect;
+SELECT s2_box_wkb(s2_bounds_box('POINT (0 1)'::GEOGRAPHY)) as rect;
           )");
 
           func.SetTag("ext", "geography");
@@ -431,7 +431,7 @@ struct S2BoxStruct {
     FunctionBuilder::RegisterScalar(
         instance, "s2_box_struct", [](ScalarFunctionBuilder& func) {
           func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
-            variant.AddParameter("box", Types::BOX_LNGLAT());
+            variant.AddParameter("box", Types::S2_BOX());
             variant.SetReturnType(LogicalType::STRUCT({{"xmin", LogicalType::DOUBLE},
                                                        {"ymin", LogicalType::DOUBLE},
                                                        {"xmax", LogicalType::DOUBLE},
@@ -441,10 +441,10 @@ struct S2BoxStruct {
 
           func.SetDescription(
               R"(
-Return a BOX_LNGLAT storage as a struct(xmin, ymin, xmax, ymax).
+Return a S2_BOX storage as a struct(xmin, ymin, xmax, ymax).
 )");
           func.SetExample(R"(
-SELECT s2_box_struct(s2_bounds_rect('POINT (0 1)'::GEOGRAPHY)) as rect;
+SELECT s2_box_struct(s2_bounds_box('POINT (0 1)'::GEOGRAPHY)) as rect;
           )");
 
           func.SetTag("ext", "geography");
