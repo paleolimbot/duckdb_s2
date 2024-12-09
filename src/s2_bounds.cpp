@@ -465,6 +465,67 @@ SELECT s2_box_struct(s2_bounds_box('POINT (0 1)'::GEOGRAPHY)) as rect;
   }
 };
 
+struct S2Box {
+  static void Register(DatabaseInstance& instance) {
+    FunctionBuilder::RegisterScalar(instance, "s2_box", [](ScalarFunctionBuilder& func) {
+      func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+        variant.AddParameter("west", LogicalType::DOUBLE);
+        variant.AddParameter("south", LogicalType::DOUBLE);
+        variant.AddParameter("east", LogicalType::DOUBLE);
+        variant.AddParameter("north", LogicalType::DOUBLE);
+        variant.SetReturnType(Types::S2_BOX());
+        variant.SetFunction(ExecuteFn);
+      });
+
+      func.SetDescription(
+          R"(
+Create a S2_BOX from xmin (west), ymin (south), xmax (east), and ymax (north).
+
+This function does not validate boxes. Note that there is currently no "empty" box:
+use NULL to represent box bounds if you need to represent this concept.
+)");
+      func.SetExample(R"(
+SELECT s2_box(5.989, 47.302, 15.017, 54.983) as box;
+----
+-- xmin (west) can be greater than xmax (east) (e.g., box for Fiji)
+SELECT s2_box(177.285, -18.288, 177.285, -16.0209) as box;
+          )");
+
+      func.SetTag("ext", "geography");
+      func.SetTag("category", "bounds");
+    });
+  }
+
+  static void ExecuteFn(DataChunk& args, ExpressionState& state, Vector& result) {
+    auto count = args.size();
+
+    auto& xmin = args.data[0];
+    auto& ymin = args.data[1];
+    auto& xmax = args.data[2];
+    auto& ymax = args.data[3];
+
+    xmin.Flatten(count);
+    ymin.Flatten(count);
+    xmax.Flatten(count);
+    ymax.Flatten(count);
+
+    auto& children = StructVector::GetEntries(result);
+    auto& xmin_child = children[0];
+    auto& ymin_child = children[1];
+    auto& xmax_child = children[2];
+    auto& ymax_child = children[3];
+
+    xmin_child->Reference(xmin);
+    ymin_child->Reference(ymin);
+    xmax_child->Reference(xmax);
+    ymax_child->Reference(ymax);
+
+    if (count == 1) {
+      result.SetVectorType(VectorType::CONSTANT_VECTOR);
+    }
+  }
+};
+
 }  // namespace
 
 void RegisterS2GeographyBounds(DatabaseInstance& instance) {
@@ -472,6 +533,7 @@ void RegisterS2GeographyBounds(DatabaseInstance& instance) {
   S2BoundsRect::Register(instance);
   S2BoxLngLatAsWkb::Register(instance);
   S2BoxStruct::Register(instance);
+  S2Box::Register(instance);
   RegisterAgg(instance);
 }
 
