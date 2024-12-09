@@ -452,7 +452,7 @@ struct S2Box {
           R"(
 Create a S2_BOX from xmin (west), ymin (south), xmax (east), and ymax (north).
 
-Note that any box where ymin > ymax is considere EMPTY for the purposes of
+Note that any box where ymin > ymax is considered EMPTY for the purposes of
 comparison.
 )");
       func.SetExample(R"(

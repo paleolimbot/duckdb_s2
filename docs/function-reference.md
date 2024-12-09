@@ -9,8 +9,11 @@
 | [`s2_perimeter`](#s2_perimeter) | Calculate the perimeter of the geography in meters.|
 | [`s2_x`](#s2_x) | Extract the longitude of a point geography.|
 | [`s2_y`](#s2_y) | Extract the latitude of a point geography.|
-| [`s2_bounds_rect`](#s2_bounds_rect) | Returns the bounds of the input geography as a box with Cartesian edges.|
+| [`s2_bounds_box`](#s2_bounds_box) | Returns the bounds of the input geography as a box with Cartesian edges.|
+| [`s2_box`](#s2_box) | Create a S2_BOX from xmin (west), ymin (south), xmax (east), and ymax (north).|
+| [`s2_box_intersects`](#s2_box_intersects) | Return true if two boxes have any points in common.|
 | [`s2_box_struct`](#s2_box_struct) | Return a S2_BOX storage as a struct(xmin, ymin, xmax, ymax).|
+| [`s2_box_union`](#s2_box_union) | Return the smallest possible box that contains both input boxes.|
 | [`s2_box_wkb`](#s2_box_wkb) | Serialize a S2_BOX as WKB for export.|
 | [`s2_covering`](#s2_covering) | Returns the S2 cell covering of the geography.|
 | [`s2_covering_fixed_level`](#s2_covering_fixed_level) | Returns the S2 cell covering of the geography with a fixed level.|
@@ -227,12 +230,12 @@ SELECT s2_y('POINT (-64 45)'::GEOGRAPHY);
 ```
 ## Bounds
 
-### s2_bounds_rect
+### s2_bounds_box
 
 Returns the bounds of the input geography as a box with Cartesian edges.
 
 ```sql
-S2_BOX s2_bounds_rect(geog GEOGRAPHY)
+S2_BOX s2_bounds_box(geog GEOGRAPHY)
 ```
 
 #### Description
@@ -243,21 +246,89 @@ antimeridian.
 #### Example
 
 ```sql
-SELECT s2_bounds_rect(s2_data_country('Germany')) as rect;
+SELECT s2_bounds_box(s2_data_country('Germany')) as rect;
 --┌───────────────────────────────────────────────────────────────────────────────────────────────────────┐
 --│                                                 rect                                                  │
---│                                              S2_BOX                                               │
+--│                                                s2_box                                                 │
 --├───────────────────────────────────────────────────────────────────────────────────────────────────────┤
 --│ {'xmin': 5.988658, 'ymin': 47.30248799999997, 'xmax': 15.016996000000002, 'ymax': 54.983104000000026} │
 --└───────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
-SELECT s2_bounds_rect(s2_data_country('Fiji')) as rect;
+SELECT s2_bounds_box(s2_data_country('Fiji')) as rect;
 --┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
 --│                                               rect                                               │
---│                                            S2_BOX                                            │
+--│                                              s2_box                                              │
 --├──────────────────────────────────────────────────────────────────────────────────────────────────┤
 --│ {'xmin': 177.28504, 'ymin': -18.28799000000003, 'xmax': -179.79332, 'ymax': -16.020881999999975} │
 --└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### s2_box
+
+Create a S2_BOX from xmin (west), ymin (south), xmax (east), and ymax (north).
+
+```sql
+S2_BOX s2_box(west DOUBLE, south DOUBLE, east DOUBLE, north DOUBLE)
+```
+
+#### Description
+
+Note that any box where ymin > ymax is considered EMPTY for the purposes of
+comparison.
+
+#### Example
+
+```sql
+SELECT s2_box(5.989, 47.302, 15.017, 54.983) as box;
+--┌─────────────────────────────────────────────────────────────────┐
+--│                               box                               │
+--│                             s2_box                              │
+--├─────────────────────────────────────────────────────────────────┤
+--│ {'xmin': 5.989, 'ymin': 47.302, 'xmax': 15.017, 'ymax': 54.983} │
+--└─────────────────────────────────────────────────────────────────┘
+
+-- xmin (west) can be greater than xmax (east) (e.g., box for Fiji)
+SELECT s2_box(177.285, -18.288, 177.285, -16.0209) as box;
+--┌───────────────────────────────────────────────────────────────────────┐
+--│                                  box                                  │
+--│                                s2_box                                 │
+--├───────────────────────────────────────────────────────────────────────┤
+--│ {'xmin': 177.285, 'ymin': -18.288, 'xmax': 177.285, 'ymax': -16.0209} │
+--└───────────────────────────────────────────────────────────────────────┘
+```
+
+### s2_box_intersects
+
+Return true if two boxes have any points in common.
+
+```sql
+BOOLEAN s2_box_intersects(box1 S2_BOX, box2 S2_BOX)
+```
+
+#### Example
+
+```sql
+SELECT s2_box_intersects(
+  s2_bounds_box(s2_data_country('Germany')),
+  s2_bounds_box(s2_data_country('France'))
+);
+--┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+--│ s2_box_intersects(s2_bounds_box(s2_data_country('Germany')), s2_bounds_box(s2_data_country('France'))) │
+--│                                                boolean                                                 │
+--├────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+--│ true                                                                                                   │
+--└────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+SELECT s2_box_intersects(
+  s2_bounds_box(s2_data_country('Germany')),
+  s2_bounds_box(s2_data_country('Canada'))
+);
+--┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+--│ s2_box_intersects(s2_bounds_box(s2_data_country('Germany')), s2_bounds_box(s2_data_country('Canada'))) │
+--│                                                boolean                                                 │
+--├────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+--│ false                                                                                                  │
+--└────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### s2_box_struct
@@ -271,13 +342,36 @@ STRUCT(xmin DOUBLE, ymin DOUBLE, xmax DOUBLE, ymax DOUBLE) s2_box_struct(box S2_
 #### Example
 
 ```sql
-SELECT s2_box_struct(s2_bounds_rect('POINT (0 1)'::GEOGRAPHY)) as rect;
+SELECT s2_box_struct(s2_bounds_box('POINT (0 1)'::GEOGRAPHY)) as rect;
 --┌────────────────────────────────────────────────────────────┐
 --│                            rect                            │
 --│ struct(xmin double, ymin double, xmax double, ymax double) │
 --├────────────────────────────────────────────────────────────┤
 --│ {'xmin': 0.0, 'ymin': 1.0, 'xmax': 0.0, 'ymax': 1.0}       │
 --└────────────────────────────────────────────────────────────┘
+```
+
+### s2_box_union
+
+Return the smallest possible box that contains both input boxes.
+
+```sql
+S2_BOX s2_box_union(box1 S2_BOX, box2 S2_BOX)
+```
+
+#### Example
+
+```sql
+SELECT s2_box_union(
+  s2_bounds_box(s2_data_country('Germany')),
+  s2_bounds_box(s2_data_country('France'))
+);
+--┌─────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+--│    s2_box_union(s2_bounds_box(s2_data_country('Germany')), s2_bounds_box(s2_data_country('France')))    │
+--│                                                 s2_box                                                  │
+--├─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+--│ {'xmin': -54.524754, 'ymin': 2.053388999999975, 'xmax': 15.016996000000002, 'ymax': 54.983104000000026} │
+--└─────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### s2_box_wkb
@@ -291,7 +385,7 @@ BLOB s2_box_wkb(box S2_BOX)
 #### Example
 
 ```sql
-SELECT s2_box_wkb(s2_bounds_rect('POINT (0 1)'::GEOGRAPHY)) as rect;
+SELECT s2_box_wkb(s2_bounds_box('POINT (0 1)'::GEOGRAPHY)) as rect;
 --┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 --│                                                         rect                                                         │
 --│                                                         blob                                                         │
