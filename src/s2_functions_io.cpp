@@ -30,8 +30,39 @@ struct S2GeogFromText {
             variant.SetFunction(ExecuteFn);
           });
 
-          func.SetDescription("Returns the geography from a WKT string.");
-          // TODO: Example
+          func.SetDescription(R"(
+Returns the geography from a WKT string.
+
+This is an alias for the cast from VARCHAR to GEOGRAPHY. This
+function assumes spherical edges.
+)");
+          func.SetExample(R"(
+SELECT s2_geogfromtext('POINT (0 1)');
+----
+SELECT 'POINT (0 1)'::GEOGRAPHY;
+)");
+
+          func.SetTag("ext", "geography");
+          func.SetTag("category", "conversion");
+        });
+
+    FunctionBuilder::RegisterScalar(
+        instance, "s2_geogfromtext_novalidate", [](ScalarFunctionBuilder& func) {
+          func.AddVariant([](ScalarFunctionVariantBuilder& variant) {
+            variant.AddParameter("wkt", LogicalType::VARCHAR);
+            variant.SetReturnType(Types::GEOGRAPHY());
+            variant.SetFunction(ExecuteFnNovalidate);
+          });
+
+          func.SetDescription(R"(
+Returns the geography from a WKT string skipping validation.
+
+This is useful to determine which of some set of geometries is not valid and
+why.
+)");
+          func.SetExample(R"(
+SELECT s2_geogfromtext_novalidate('LINESTRING (0 0, 0 0, 1 1)');
+)");
 
           func.SetTag("ext", "geography");
           func.SetTag("category", "conversion");
@@ -46,15 +77,24 @@ struct S2GeogFromText {
     Execute(args.data[0], result, args.size());
   }
 
+  static inline void ExecuteFnNovalidate(DataChunk& args, ExpressionState& state,
+                                         Vector& result) {
+    s2geography::geoarrow::ImportOptions options;
+    options.set_check(false);
+    Execute(args.data[0], result, args.size(), options);
+  }
+
   static inline bool ExecuteCast(Vector& source, Vector& result, idx_t count,
                                  CastParameters& parameters) {
     Execute(source, result, count);
     return true;
   }
 
-  static inline void Execute(Vector& source, Vector& result, idx_t count) {
+  static inline void Execute(Vector& source, Vector& result, idx_t count,
+                             const s2geography::geoarrow::ImportOptions& options =
+                                 s2geography::geoarrow::ImportOptions()) {
     GeographyEncoder encoder;
-    s2geography::WKTReader reader;
+    s2geography::WKTReader reader(options);
 
     UnaryExecutor::Execute<string_t, string_t>(source, result, count, [&](string_t wkt) {
       auto geog = reader.read_feature(wkt.GetData(), wkt.GetSize());
